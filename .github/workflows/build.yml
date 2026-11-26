@@ -5,6 +5,9 @@ on:
     branches: [ main ]
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: windows-latest
@@ -15,10 +18,45 @@ jobs:
         with:
           dotnet-version: 8.0.x
 
+      - name: Verzió kiolvasása
+        id: ver
+        shell: pwsh
+        run: |
+          $proj = Get-ChildItem -Recurse -Filter GlassCommander.csproj | Select-Object -First 1
+          if (-not $proj) { Write-Error "GlassCommander.csproj nem található"; exit 1 }
+          [xml]$x = Get-Content $proj.FullName
+          $v = $x.Project.PropertyGroup | ForEach-Object { $_.Version } | Where-Object { $_ } | Select-Object -First 1
+          Write-Host "Verzió: $v"
+          "version=$v" >> $env:GITHUB_OUTPUT
+          "proj=$($proj.FullName)" >> $env:GITHUB_OUTPUT
+
       - name: Publish
-        run: dotnet publish src/GlassCommander/GlassCommander.csproj -c Release -r win-x64 -p:Platform=x64 --self-contained true -o publish
+        shell: pwsh
+        run: dotnet publish "${{ steps.ver.outputs.proj }}" -c Release -r win-x64 -p:Platform=x64 --self-contained true -o publish
+
+      - name: Portable zip
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force dist | Out-Null
+          Compress-Archive -Path publish\* -DestinationPath "dist\GlassCommander-${{ steps.ver.outputs.version }}-portable.zip"
+
+      - name: Telepítő (Inno Setup)
+        shell: pwsh
+        run: |
+          choco install innosetup -y --no-progress
+          $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          & $iscc "/DAppVersion=${{ steps.ver.outputs.version }}" "/DSourceDir=$PWD\publish" "installer\GlassCommander.iss"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - uses: actions/upload-artifact@v4
         with:
-          name: GlassCommander-win-x64
-          path: publish/
+          name: GlassCommander-${{ steps.ver.outputs.version }}
+          path: dist/
+
+      - name: GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.ver.outputs.version }}
+          name: Glass Commander ${{ steps.ver.outputs.version }}
+          files: dist/*
+          make_latest: true
