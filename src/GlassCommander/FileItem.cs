@@ -1,4 +1,6 @@
+using System.ComponentModel;
 using System.Globalization;
+using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Media;
 using Windows.UI;
 
@@ -6,8 +8,45 @@ namespace GlassCommander;
 
 public enum FileKind { Parent, Folder, File, Image, Video, Audio, Archive, Code, Executable, Pdf, Text }
 
-public sealed class FileItem
+public sealed class FileItem : INotifyPropertyChanged
 {
+    private ImageSource? _icon;
+
+    public event PropertyChangedEventHandler? PropertyChanged;
+
+    /// <summary>A valódi Windows-ikon (háttérben töltődik be; addig a Fluent glyph látszik).</summary>
+    public ImageSource? Icon
+    {
+        get => _icon;
+        set
+        {
+            if (ReferenceEquals(_icon, value)) return;
+            _icon = value;
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Icon)));
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(GlyphVisibility)));
+        }
+    }
+
+    public Visibility GlyphVisibility => _icon == null ? Visibility.Visible : Visibility.Collapsed;
+
+    /// <summary>Ikon-gyorsítótár kulcsa: kiterjesztés szerint, vagy saját ikonú fájloknál (exe, lnk…) elérési út szerint.</summary>
+    public string? IconKey
+    {
+        get
+        {
+            if (IsParent) return null;
+            if (IsDirectory)
+                return (Attributes & (FileAttributes.System | FileAttributes.ReadOnly)) != 0 ? "path:" + FullPath : "dir";
+            var ext = Extension.ToLowerInvariant();
+            return ext switch
+            {
+                "exe" or "lnk" or "ico" or "url" or "cur" or "scr" or "appref-ms" or "msc" => "path:" + FullPath,
+                "" => "ext:",
+                _ => "ext:." + ext,
+            };
+        }
+    }
+
     public FileItem(string name, string fullPath, bool isDirectory, bool isParent,
                     long size, DateTime modified, FileAttributes attributes)
     {

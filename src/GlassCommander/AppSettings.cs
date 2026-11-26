@@ -6,6 +6,10 @@ internal sealed class AppSettings
 {
     public string? LeftPath { get; set; }
     public string? RightPath { get; set; }
+    public List<string>? LeftTabs { get; set; }
+    public List<string>? RightTabs { get; set; }
+    public int LeftTabIndex { get; set; }
+    public int RightTabIndex { get; set; }
     public bool ShowHidden { get; set; }
     public string Backdrop { get; set; } = "Mica";   // Mica | MicaAlt | Acrylic
     public int Width { get; set; } = 1400;

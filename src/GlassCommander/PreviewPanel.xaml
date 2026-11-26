@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="utf-8"?>
+<UserControl
+    x:Class="GlassCommander.PreviewPanel"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <Border CornerRadius="8"
+            BorderThickness="1"
+            BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+            Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="*" />
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
+
+            <!-- Fejléc -->
+            <Grid Padding="14,12,14,10" ColumnSpacing="10"
+                  BorderThickness="0,0,0,1"
+                  BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <FontIcon Glyph="&#xE8FF;" FontSize="16" Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}" />
+                <TextBlock x:Name="TitleText" Grid.Column="1" Text="Gyorsnézet"
+                           Style="{StaticResource BodyStrongTextBlockStyle}"
+                           TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+                <TextBlock Grid.Column="2" Text="Ctrl+Q: bezárás" FontSize="12" VerticalAlignment="Center"
+                           Foreground="{ThemeResource TextFillColorTertiaryBrush}" />
+            </Grid>
+
+            <!-- Tartalom -->
+            <Grid Grid.Row="1">
+                <Image x:Name="ImageView" Stretch="Uniform" Margin="16" Visibility="Collapsed" />
+
+                <ScrollViewer x:Name="TextScroll" Visibility="Collapsed"
+                              HorizontalScrollBarVisibility="Auto" HorizontalScrollMode="Auto"
+                              VerticalScrollBarVisibility="Auto" Padding="16,12,16,12">
+                    <TextBlock x:Name="TextView"
+                               FontFamily="Cascadia Mono, Cascadia Code, Consolas"
+                               FontSize="13"
+                               TextWrapping="NoWrap"
+                               IsTextSelectionEnabled="True" />
+                </ScrollViewer>
+
+                <StackPanel x:Name="InfoView" Visibility="Collapsed"
+                            VerticalAlignment="Center" HorizontalAlignment="Center"
+                            Spacing="14" Padding="24">
+                    <FontIcon x:Name="InfoGlyph" FontSize="64" HorizontalAlignment="Center" />
+                    <TextBlock x:Name="InfoText" TextAlignment="Center" TextWrapping="Wrap" MaxWidth="420"
+                               Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                </StackPanel>
+            </Grid>
+
+            <!-- Lábléc -->
+            <TextBlock x:Name="FooterText" Grid.Row="2" Padding="14,6,14,8" FontSize="12"
+                       Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                       TextTrimming="CharacterEllipsis" />
+        </Grid>
+    </Border>
+</UserControl>

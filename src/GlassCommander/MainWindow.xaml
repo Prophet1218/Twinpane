@@ -53,6 +53,10 @@
                                 ToolTipService.ToolTip="Ctrl+H" AllowFocusOnInteraction="False">
                 <AppBarToggleButton.Icon><FontIcon Glyph="&#xE7B3;" /></AppBarToggleButton.Icon>
             </AppBarToggleButton>
+            <AppBarToggleButton x:Name="PreviewToggle" Label="Gyorsnézet" Click="Preview_Click"
+                                ToolTipService.ToolTip="Ctrl+Q – előnézet a másik panelben" AllowFocusOnInteraction="False">
+                <AppBarToggleButton.Icon><FontIcon Glyph="&#xE8FF;" /></AppBarToggleButton.Icon>
+            </AppBarToggleButton>
             <AppBarButton Label="Panelcsere" Click="Swap_Click" ToolTipService.ToolTip="Ctrl+U" AllowFocusOnInteraction="False">
                 <AppBarButton.Icon><FontIcon Glyph="&#xE8AB;" /></AppBarButton.Icon>
             </AppBarButton>
@@ -60,7 +64,7 @@
                 <AppBarButton.Icon><FontIcon Glyph="&#xE8A9;" /></AppBarButton.Icon>
             </AppBarButton>
             <AppBarSeparator />
-            <AppBarButton Label="Terminál" Click="Terminal_Click" ToolTipService.ToolTip="Ctrl+T" AllowFocusOnInteraction="False">
+            <AppBarButton Label="Terminál" Click="Terminal_Click" ToolTipService.ToolTip="Ctrl+Shift+T" AllowFocusOnInteraction="False">
                 <AppBarButton.Icon><FontIcon Glyph="&#xE756;" /></AppBarButton.Icon>
             </AppBarButton>
             <AppBarButton Label="Intéző" Click="Explorer_Click" ToolTipService.ToolTip="Megnyitás Intézőben (Ctrl+E)" AllowFocusOnInteraction="False">
@@ -81,6 +85,7 @@
             </Grid.ColumnDefinitions>
             <local:FilePane x:Name="LeftPane" Grid.Column="0" />
             <local:FilePane x:Name="RightPane" Grid.Column="1" />
+            <local:PreviewPanel x:Name="Preview" Grid.Column="1" Visibility="Collapsed" />
         </Grid>
 
         <!-- Funkcióbillentyű-sáv -->

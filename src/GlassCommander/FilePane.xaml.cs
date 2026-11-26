@@ -1,8 +1,12 @@
 using System.Collections.ObjectModel;
 using Microsoft.UI.Dispatching;
+using Microsoft.UI.Input;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
+using Windows.ApplicationModel.DataTransfer;
+using Windows.ApplicationModel.DataTransfer.DragDrop;
+using Windows.UI.Core;
 using VirtualKey = Windows.System.VirtualKey;
 
 namespace GlassCommander;
@@ -17,11 +21,31 @@ public sealed partial class FilePane : UserControl
     /// <summary>Helyi menüből kért parancs (a főablak hajtja végre).</summary>
     public event Action<FilePane, string>? CommandRequested;
 
+    /// <summary>Fájlokat ejtettek a panelre: (forrás útvonalak, célmappa, mozgatás?).</summary>
+    public event Action<FilePane, IReadOnlyList<string>, string, bool>? DropRequested;
+
+    /// <summary>Változott a kurzor alatti elem (a gyorsnézethez).</summary>
+    public event EventHandler? CurrentItemChanged;
+
     public string CurrentPath { get; private set; } = "";
     public bool ShowHidden { get; set; }
 
     private ObservableCollection<FileItem> _items = new();
-    private readonly Stack<string> _back = new();
+    private sealed class PaneTab
+    {
+        public string Path = "";
+        public string? FocusName;
+        public readonly Stack<string> Back = new();
+        public TabViewItem Item = null!;
+    }
+
+    private PaneTab? _tab;
+    private bool _suppressTabChange;
+    private Stack<string> Back => EnsureTab().Back;
+
+    private string _search = "";
+    private readonly DispatcherQueueTimer _searchTimer;
+    private const string InternalDragFormat = "GlassCommander.Paths";
     private readonly Dictionary<string, string> _lastPathPerDrive = new(StringComparer.OrdinalIgnoreCase);
     private SortColumn _sort = SortColumn.Name;
     private bool _ascending = true;
@@ -40,6 +64,16 @@ public sealed partial class FilePane : UserControl
         _refreshTimer.Interval = TimeSpan.FromMilliseconds(400);
         _refreshTimer.IsRepeating = false;
         _refreshTimer.Tick += async (_, _) => await RefreshAsync();
+
+        _searchTimer = DispatcherQueue.CreateTimer();
+        _searchTimer.Interval = TimeSpan.FromMilliseconds(1600);
+        _searchTimer.IsRepeating = false;
+        _searchTimer.Tick += (_, _) => ClearSearch();
+
+        FileList.CharacterReceived += (_, e) =>
+        {
+            if (OnSearchChar(e.Character)) e.Handled = true;
+        };
 
         BuildMenu();
         LoadDrives();
@@ -95,10 +129,15 @@ public sealed partial class FilePane : UserControl
         }
 
         if (pushHistory && CurrentPath.Length > 0 && !PathEquals(CurrentPath, path))
-            _back.Push(CurrentPath);
+            Back.Push(CurrentPath);
 
         CurrentPath = path;
         PathBox.Text = path;
+        ClearSearch();
+        var tab = EnsureTab();
+        tab.Path = path;
+        tab.Item.Header = TabTitle(path);
+        ToolTipService.SetToolTip(tab.Item, path);
         var root = Path.GetPathRoot(path);
         if (!string.IsNullOrEmpty(root)) _lastPathPerDrive[root] = path;
 
@@ -136,9 +175,9 @@ public sealed partial class FilePane : UserControl
 
     public async Task GoBackAsync()
     {
-        while (_back.Count > 0)
+        while (Back.Count > 0)
         {
-            var p = _back.Pop();
+            var p = Back.Pop();
             if (Directory.Exists(p))
             {
                 await NavigateAsync(p, pushHistory: false);
@@ -246,6 +285,7 @@ public sealed partial class FilePane : UserControl
             if (IsActive) FocusItem(focus);
         }
         UpdateStatus();
+        IconService.Request(_items, DispatcherQueue);
     }
 
     // ------------------------------------------------------------------ Kijelölés / fókusz
@@ -411,7 +451,7 @@ public sealed partial class FilePane : UserControl
 
     private void UpdateHeaders()
     {
-        string Arrow(SortColumn c) => c == _sort ? (_ascending ? "  \u25B2" : "  \u25BC") : "";
+        string Arrow(SortColumn c) => c == _sort ? (_ascending ? "  ▲" : "  ▼") : "";
         NameHeader.Content = "Név" + Arrow(SortColumn.Name);
         ExtHeader.Content = "Kit." + Arrow(SortColumn.Ext);
         SizeHeader.Content = "Méret" + Arrow(SortColumn.Size);
@@ -420,7 +460,11 @@ public sealed partial class FilePane : UserControl
 
     // ------------------------------------------------------------------ Állapot
 
-    private void List_SelectionChanged(object sender, SelectionChangedEventArgs e) => UpdateStatus();
+    private void List_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        UpdateStatus();
+        CurrentItemChanged?.Invoke(this, EventArgs.Empty);
+    }
 
     private void UpdateStatus()
     {
@@ -492,21 +536,307 @@ public sealed partial class FilePane : UserControl
             _menu.Items.Add(mi);
         }
 
-        Add("Megnyitás", "\uE8E5", "open", "Enter");
-        Add("Szerkesztés", "\uE70F", "edit", "F4");
+        Add("Megnyitás", "", "open", "Enter");
+        Add("Megnyitás új fülön", "", "opentab", "Ctrl+↑");
+        Add("Szerkesztés", "", "edit", "F4");
         _menu.Items.Add(new MenuFlyoutSeparator());
-        Add("Kivágás", "\uE8C6", "cut", "Ctrl+X");
-        Add("Másolás vágólapra", "\uE8C8", "clipcopy", "Ctrl+C");
-        Add("Beillesztés", "\uE77F", "paste", "Ctrl+V");
-        Add("Elérési út másolása", "\uE71B", "copypath", "Ctrl+Shift+C");
+        Add("Kivágás", "", "cut", "Ctrl+X");
+        Add("Másolás vágólapra", "", "clipcopy", "Ctrl+C");
+        Add("Beillesztés", "", "paste", "Ctrl+V");
+        Add("Elérési út másolása", "", "copypath", "Ctrl+Shift+C");
         _menu.Items.Add(new MenuFlyoutSeparator());
-        Add("Másolás a másik panelre", "\uE8C8", "copy", "F5");
-        Add("Mozgatás a másik panelre", "\uE8DE", "move", "F6");
-        Add("Átnevezés", "\uE8AC", "rename", "F2");
-        Add("Törlés", "\uE74D", "delete", "Del");
+        Add("Másolás a másik panelre", "", "copy", "F5");
+        Add("Mozgatás a másik panelre", "", "move", "F6");
+        Add("Átnevezés", "", "rename", "F2");
+        Add("Törlés", "", "delete", "Del");
         _menu.Items.Add(new MenuFlyoutSeparator());
-        Add("Terminál itt", "\uE756", "terminal");
-        Add("Tulajdonságok", "\uE946", "properties", "Alt+Enter");
+        Add("Terminál itt", "", "terminal");
+        Add("Tulajdonságok", "", "properties", "Alt+Enter");
+    }
+
+    // ------------------------------------------------------------------ Fülek
+
+    private PaneTab EnsureTab()
+    {
+        if (_tab != null) return _tab;
+        _tab = CreateTab(CurrentPath.Length > 0 ? CurrentPath : Environment.GetFolderPath(Environment.SpecialFolder.UserProfile));
+        _suppressTabChange = true;
+        Tabs.TabItems.Add(_tab.Item);
+        Tabs.SelectedItem = _tab.Item;
+        _suppressTabChange = false;
+        return _tab;
+    }
+
+    private static PaneTab CreateTab(string path)
+    {
+        var tab = new PaneTab { Path = path };
+        tab.Item = new TabViewItem
+        {
+            Header = TabTitle(path),
+            IconSource = new FontIconSource { Glyph = "" },
+            Tag = tab,
+        };
+        ToolTipService.SetToolTip(tab.Item, path);
+        return tab;
+    }
+
+    /// <summary>Indításkor: a mentett fülek visszaállítása.</summary>
+    public async Task InitializeAsync(IReadOnlyList<string>? paths, int selectedIndex, string fallback)
+    {
+        var valid = (paths ?? Array.Empty<string>()).Where(p => !string.IsNullOrEmpty(p) && Directory.Exists(p)).ToList();
+        if (valid.Count == 0) valid.Add(fallback);
+        selectedIndex = Math.Clamp(selectedIndex, 0, valid.Count - 1);
+
+        _suppressTabChange = true;
+        Tabs.TabItems.Clear();
+        PaneTab? selected = null;
+        for (int i = 0; i < valid.Count; i++)
+        {
+            var t = CreateTab(valid[i]);
+            Tabs.TabItems.Add(t.Item);
+            if (i == selectedIndex) selected = t;
+        }
+        _tab = selected;
+        Tabs.SelectedItem = selected!.Item;
+        _suppressTabChange = false;
+
+        await NavigateAsync(selected.Path, pushHistory: false);
+    }
+
+    public List<string> TabPaths =>
+        Tabs.TabItems.OfType<TabViewItem>().Select(i => ((PaneTab)i.Tag).Path).ToList();
+
+    public int SelectedTabIndex => Math.Max(0, Tabs.SelectedIndex);
+
+    public async Task NewTabAsync(string? path = null)
+    {
+        var current = EnsureTab();
+        current.FocusName = FocusedItem()?.Name;
+
+        var tab = CreateTab(path ?? CurrentPath);
+        _suppressTabChange = true;
+        int idx = Tabs.TabItems.IndexOf(current.Item);
+        Tabs.TabItems.Insert(idx + 1, tab.Item);
+        Tabs.SelectedItem = tab.Item;
+        _suppressTabChange = false;
+
+        _tab = tab;
+        await NavigateAsync(tab.Path, pushHistory: false);
+        FocusList();
+    }
+
+    public async Task OpenFocusedInNewTabAsync()
+    {
+        var item = FocusedItem();
+        if (item is { IsDirectory: true }) await NewTabAsync(item.FullPath);
+        else await NewTabAsync();
+    }
+
+    public async Task CloseCurrentTabAsync()
+    {
+        if (_tab != null) await CloseTabAsync(_tab);
+    }
+
+    private async Task CloseTabAsync(PaneTab tab)
+    {
+        if (Tabs.TabItems.Count <= 1) return;
+        int idx = Tabs.TabItems.IndexOf(tab.Item);
+        bool wasCurrent = tab == _tab;
+
+        _suppressTabChange = true;
+        Tabs.TabItems.Remove(tab.Item);
+        if (wasCurrent)
+        {
+            int next = Math.Min(idx, Tabs.TabItems.Count - 1);
+            var nextItem = (TabViewItem)Tabs.TabItems[next];
+            Tabs.SelectedItem = nextItem;
+            _tab = (PaneTab)nextItem.Tag;
+        }
+        else if (_tab != null)
+        {
+            Tabs.SelectedItem = _tab.Item;
+        }
+        _suppressTabChange = false;
+
+        if (wasCurrent && _tab != null)
+            await NavigateAsync(_tab.Path, _tab.FocusName, pushHistory: false);
+        FocusList();
+    }
+
+    public void SwitchTab(int direction)
+    {
+        int count = Tabs.TabItems.Count;
+        if (count <= 1) return;
+        int idx = (Math.Max(0, Tabs.SelectedIndex) + direction + count) % count;
+        Tabs.SelectedIndex = idx;   // a SelectionChanged navigál
+    }
+
+    private async void Tabs_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_suppressTabChange) return;
+        if (Tabs.SelectedItem is not TabViewItem { Tag: PaneTab tab } || tab == _tab) return;
+
+        if (_tab != null) _tab.FocusName = FocusedItem()?.Name;
+        _tab = tab;
+        Activated?.Invoke(this, EventArgs.Empty);
+        await NavigateAsync(tab.Path, tab.FocusName, pushHistory: false);
+        FocusList();
+    }
+
+    private async void Tabs_AddTabButtonClick(TabView sender, object args)
+    {
+        Activated?.Invoke(this, EventArgs.Empty);
+        await NewTabAsync();
+    }
+
+    private async void Tabs_TabCloseRequested(TabView sender, TabViewTabCloseRequestedEventArgs args)
+    {
+        if (args.Tab.Tag is PaneTab tab) await CloseTabAsync(tab);
+    }
+
+    private static string TabTitle(string path)
+    {
+        var name = Path.GetFileName(path.TrimEnd('\\'));
+        return string.IsNullOrEmpty(name) ? path : name;
+    }
+
+    // ------------------------------------------------------------------ Gyorskereső
+
+    public bool SearchActive => _search.Length > 0;
+
+    private static bool IsDown(VirtualKey key) =>
+        InputKeyboardSource.GetKeyStateForCurrentThread(key).HasFlag(CoreVirtualKeyStates.Down);
+
+    private bool OnSearchChar(char c)
+    {
+        if (char.IsControl(c) || c == ' ') return false;
+        if (IsDown(VirtualKey.Control) || IsDown(VirtualKey.Menu)) return false;
+        _search += c;
+        ApplySearch();
+        return true;
+    }
+
+    public void SearchBackspace()
+    {
+        if (_search.Length == 0) return;
+        _search = _search[..^1];
+        ApplySearch();
+    }
+
+    public void ClearSearch()
+    {
+        _search = "";
+        _searchTimer?.Stop();
+        if (SearchBox != null) SearchBox.Visibility = Visibility.Collapsed;
+    }
+
+    private void ApplySearch()
+    {
+        _searchTimer.Stop();
+        if (_search.Length == 0) { ClearSearch(); return; }
+        _searchTimer.Start();
+
+        var match = _items.FirstOrDefault(i => !i.IsParent && i.Name.StartsWith(_search, StringComparison.CurrentCultureIgnoreCase))
+                 ?? _items.FirstOrDefault(i => !i.IsParent && i.Name.Contains(_search, StringComparison.CurrentCultureIgnoreCase));
+
+        SearchText.Text = _search;
+        SearchHint.Text = match == null ? "nincs találat" : "";
+        SearchBox.Visibility = Visibility.Visible;
+
+        if (match != null)
+        {
+            FileList.SelectedItems.Clear();
+            FileList.SelectedItem = match;
+            FileList.ScrollIntoView(match);
+            FocusItem(match);
+        }
+    }
+
+    // ------------------------------------------------------------------ Drag & drop
+
+    private void FileList_DragItemsStarting(object sender, DragItemsStartingEventArgs e)
+    {
+        var items = e.Items.OfType<FileItem>().Where(i => !i.IsParent).ToList();
+        if (items.Count == 0) { e.Cancel = true; return; }
+
+        e.Data.Properties[InternalDragFormat] = string.Join("\n", items.Select(i => i.FullPath));
+        e.Data.RequestedOperation = DataPackageOperation.Copy | DataPackageOperation.Move;
+
+        // Az Intéző (és más programok) felé valódi fájlokként adjuk át, igény szerint előállítva.
+        e.Data.SetDataProvider(StandardDataFormats.StorageItems, async request =>
+        {
+            var deferral = request.GetDeferral();
+            try
+            {
+                var list = new List<Windows.Storage.IStorageItem>();
+                foreach (var i in items)
+                {
+                    try
+                    {
+                        if (i.IsDirectory) list.Add(await Windows.Storage.StorageFolder.GetFolderFromPathAsync(i.FullPath));
+                        else list.Add(await Windows.Storage.StorageFile.GetFileFromPathAsync(i.FullPath));
+                    }
+                    catch { /* nem elérhető elem kimarad */ }
+                }
+                request.SetData(list);
+            }
+            finally
+            {
+                deferral.Complete();
+            }
+        });
+    }
+
+    private string DropTarget(DragEventArgs e) =>
+        (e.OriginalSource as FrameworkElement)?.DataContext is FileItem { IsDirectory: true } f ? f.FullPath : CurrentPath;
+
+    private void FileList_DragOver(object sender, DragEventArgs e)
+    {
+        if (!e.DataView.Contains(StandardDataFormats.StorageItems))
+        {
+            e.AcceptedOperation = DataPackageOperation.None;
+            return;
+        }
+        bool move = (e.Modifiers & DragDropModifiers.Shift) != 0;
+        e.AcceptedOperation = move ? DataPackageOperation.Move : DataPackageOperation.Copy;
+        e.DragUIOverride.Caption = $"{(move ? "Mozgatás" : "Másolás")} ide: {TabTitle(DropTarget(e))}";
+        e.DragUIOverride.IsCaptionVisible = true;
+    }
+
+    private async void FileList_Drop(object sender, DragEventArgs e)
+    {
+        var deferral = e.GetDeferral();
+        try
+        {
+            string target = DropTarget(e);
+            bool move = (e.Modifiers & DragDropModifiers.Shift) != 0;
+
+            List<string> paths;
+            if (e.DataView.Properties.TryGetValue(InternalDragFormat, out var v) && v is string s)
+            {
+                paths = s.Split('\n', StringSplitOptions.RemoveEmptyEntries).ToList();
+            }
+            else
+            {
+                var items = await e.DataView.GetStorageItemsAsync();
+                paths = items.Select(i => i.Path).Where(p => !string.IsNullOrEmpty(p)).ToList();
+            }
+
+            paths.RemoveAll(p => PathEquals(p, target));   // mappát önmagába nem
+            if (paths.Count == 0) return;
+            if (paths.All(p => PathEquals(Path.GetDirectoryName(p) ?? "", target))) return;   // ugyanoda
+
+            e.AcceptedOperation = move ? DataPackageOperation.Move : DataPackageOperation.Copy;
+            DropRequested?.Invoke(this, paths, target, move);
+        }
+        catch (Exception ex)
+        {
+            await Dialogs.ErrorAsync(XamlRoot, ex.Message);
+        }
+        finally
+        {
+            deferral.Complete();
+        }
     }
 
     // ------------------------------------------------------------------ Segédek

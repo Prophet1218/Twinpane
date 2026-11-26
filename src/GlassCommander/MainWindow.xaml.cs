@@ -16,6 +16,7 @@ public sealed partial class MainWindow : Window
     private readonly AppSettings _settings = AppSettings.Load();
     private readonly IntPtr _hwnd;
     private bool _leftActive = true;
+    private bool _previewOn;
 
     private FilePane Active => _leftActive ? LeftPane : RightPane;
     private FilePane Other => _leftActive ? RightPane : LeftPane;
@@ -31,6 +32,12 @@ public sealed partial class MainWindow : Window
         AppWindow.Resize(new SizeInt32(Math.Max(900, _settings.Width), Math.Max(600, _settings.Height)));
 
         ApplyBackdrop(_settings.Backdrop);
+        try
+        {
+            var icon = Path.Combine(AppContext.BaseDirectory, "app.ico");
+            if (File.Exists(icon)) AppWindow.SetIcon(icon);
+        }
+        catch { }
 
         var v = typeof(App).Assembly.GetName().Version;
         VersionText.Text = v == null ? "" : $"v{v.Major}.{v.Minor}.{v.Build}";
@@ -42,6 +49,10 @@ public sealed partial class MainWindow : Window
         RightPane.Activated += (_, _) => SetActive(false, focus: false);
         LeftPane.CommandRequested += OnPaneCommand;
         RightPane.CommandRequested += OnPaneCommand;
+        LeftPane.DropRequested += OnPaneDrop;
+        RightPane.DropRequested += OnPaneDrop;
+        LeftPane.CurrentItemChanged += OnPaneCurrentItemChanged;
+        RightPane.CurrentItemChanged += OnPaneCurrentItemChanged;
 
         Root.Loaded += Root_Loaded;
         Closed += MainWindow_Closed;
@@ -52,8 +63,14 @@ public sealed partial class MainWindow : Window
         var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
         var downloads = Path.Combine(home, "Downloads");
 
-        await LeftPane.NavigateAsync(ValidDir(_settings.LeftPath) ?? home);
-        await RightPane.NavigateAsync(ValidDir(_settings.RightPath) ?? (Directory.Exists(downloads) ? downloads : home));
+        var rightDefault = Directory.Exists(downloads) ? downloads : home;
+
+        await LeftPane.InitializeAsync(
+            _settings.LeftTabs ?? new List<string> { ValidDir(_settings.LeftPath) ?? home },
+            _settings.LeftTabIndex, home);
+        await RightPane.InitializeAsync(
+            _settings.RightTabs ?? new List<string> { ValidDir(_settings.RightPath) ?? rightDefault },
+            _settings.RightTabIndex, rightDefault);
         SetActive(true, focus: true);
     }
 
@@ -63,6 +80,10 @@ public sealed partial class MainWindow : Window
     {
         _settings.LeftPath = LeftPane.CurrentPath;
         _settings.RightPath = RightPane.CurrentPath;
+        _settings.LeftTabs = LeftPane.TabPaths;
+        _settings.RightTabs = RightPane.TabPaths;
+        _settings.LeftTabIndex = LeftPane.SelectedTabIndex;
+        _settings.RightTabIndex = RightPane.SelectedTabIndex;
         _settings.Width = AppWindow.Size.Width;
         _settings.Height = AppWindow.Size.Height;
         _settings.Save();
@@ -72,10 +93,64 @@ public sealed partial class MainWindow : Window
 
     private void SetActive(bool left, bool focus)
     {
+        bool changed = _leftActive != left;
         _leftActive = left;
         LeftPane.IsActive = left;
         RightPane.IsActive = !left;
+        if (changed && _previewOn) UpdatePreview(reposition: true);
         if (focus) Active.FocusList();
+    }
+
+    // ------------------------------------------------------------------ Gyorsnézet
+
+    private void TogglePreview()
+    {
+        _previewOn = !_previewOn;
+        PreviewToggle.IsChecked = _previewOn;
+        if (_previewOn) UpdatePreview(reposition: true);
+        else
+        {
+            Preview.Visibility = Visibility.Collapsed;
+            LeftPane.Visibility = Visibility.Visible;
+            RightPane.Visibility = Visibility.Visible;
+        }
+        Active.FocusList();
+    }
+
+    private async void UpdatePreview(bool reposition = false)
+    {
+        if (!_previewOn) return;
+        if (reposition)
+        {
+            Grid.SetColumn(Preview, _leftActive ? 1 : 0);
+            Other.Visibility = Visibility.Collapsed;
+            Active.Visibility = Visibility.Visible;
+            Preview.Visibility = Visibility.Visible;
+        }
+        try { await Preview.ShowAsync(Active.FocusedItem()); }
+        catch { }
+    }
+
+    private void OnPaneCurrentItemChanged(object? sender, EventArgs e)
+    {
+        if (_previewOn && sender == Active) UpdatePreview();
+    }
+
+    private void Preview_Click(object sender, RoutedEventArgs e)
+    {
+        PreviewToggle.IsChecked = _previewOn;   // a TogglePreview állítja át
+        TogglePreview();
+    }
+
+    private async void OnPaneDrop(FilePane pane, IReadOnlyList<string> paths, string target, bool move)
+    {
+        SetActive(pane == LeftPane, focus: false);
+        try
+        {
+            await ShellOps.CopyMoveAsync(_hwnd, paths, target, move);
+            await RefreshBothAsync();
+        }
+        catch (Exception ex) { await Dialogs.ErrorAsync(Root.XamlRoot, ex.Message); }
     }
 
     // ------------------------------------------------------------------ Háttér (Mica / Acrylic)
@@ -127,8 +202,18 @@ public sealed partial class MainWindow : Window
 
         switch (e.Key)
         {
-            case VirtualKey.Tab when !ctrl && !alt && !inText:
+            case VirtualKey.Tab when ctrl:
+                action = () => { Active.SwitchTab(shift ? -1 : 1); return Task.CompletedTask; };
+                break;
+            case VirtualKey.Tab when !alt && !inText:
                 action = () => { SetActive(!_leftActive, focus: true); return Task.CompletedTask; };
+                break;
+
+            case VirtualKey.Escape when Active.SearchActive:
+                action = () => { Active.ClearSearch(); return Task.CompletedTask; };
+                break;
+            case VirtualKey.Back when inList && Active.SearchActive:
+                action = () => { Active.SearchBackspace(); return Task.CompletedTask; };
                 break;
 
             case VirtualKey.F2 when !alt && !inText: action = RenameAsync; break;
@@ -155,6 +240,7 @@ public sealed partial class MainWindow : Window
             case VirtualKey.Back when inList: action = () => Active.GoUpAsync(); break;
             case VirtualKey.Left when alt: action = () => Active.GoBackAsync(); break;
             case VirtualKey.Up when alt: action = () => Active.GoUpAsync(); break;
+            case VirtualKey.Up when ctrl && inList: action = () => Active.OpenFocusedInNewTabAsync(); break;
             case VirtualKey.Insert when inList:
                 action = () => { Active.ToggleFocusedAndAdvance(); return Task.CompletedTask; };
                 break;
@@ -176,8 +262,13 @@ public sealed partial class MainWindow : Window
             case VirtualKey.L when ctrl:
                 action = () => { Active.FocusPathBox(); return Task.CompletedTask; };
                 break;
-            case VirtualKey.T when ctrl:
+            case VirtualKey.T when ctrl && shift:
                 action = () => { ShellOps.OpenTerminal(Active.CurrentPath); return Task.CompletedTask; };
+                break;
+            case VirtualKey.T when ctrl: action = () => Active.NewTabAsync(); break;
+            case VirtualKey.W when ctrl: action = () => Active.CloseCurrentTabAsync(); break;
+            case VirtualKey.Q when ctrl:
+                action = () => { TogglePreview(); return Task.CompletedTask; };
                 break;
             case VirtualKey.E when ctrl:
                 action = () => { ShellOps.OpenInExplorer(Active.CurrentPath); return Task.CompletedTask; };
@@ -353,6 +444,7 @@ public sealed partial class MainWindow : Window
             switch (cmd)
             {
                 case "open": await Active.OpenFocusedAsync(); break;
+                case "opentab": await Active.OpenFocusedInNewTabAsync(); break;
                 case "edit": await EditAsync(); break;
                 case "cut": await ClipboardCopyAsync(cut: true); break;
                 case "clipcopy": await ClipboardCopyAsync(cut: false); break;
