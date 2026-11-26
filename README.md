@@ -1,4 +1,6 @@
-# Glass Commander 1.2.0
+# Twinpane 1.4.0
+
+*(Korábbi neve: Glass Commander)*
 
 Kétpaneles fájlkezelő Windows 11-re: a Total Commander működése, natív WinUI 3-as felülettel
 (Mica / Acrylic háttér, Fluent ikonok, lekerekített kártyák, világos/sötét téma a rendszer szerint).
@@ -7,16 +9,16 @@ Kétpaneles fájlkezelő Windows 11-re: a Total Commander működése, natív Wi
 
 A **Releases** oldalon (jobb oldalt a repó főoldalán) minden verzióhoz két fájl van:
 
-- **GlassCommander-x.y.z-Setup.exe** – telepítő: Start menü, asztali ikon (választható), eltávolítás a Gépházból.
+- **Twinpane-x.y.z-Setup.exe** – telepítő: Start menü, asztali ikon (választható), eltávolítás a Gépházból.
   Rendszergazdai jog nélkül is települ.
-- **GlassCommander-x.y.z-portable.zip** – hordozható változat: kicsomagolod, és fut, telepítés nélkül.
+- **Twinpane-x.y.z-portable.zip** – hordozható változat: kicsomagolod, és fut, telepítés nélkül.
 
 ## Fordítás
 
 ### A) GitHub Actions – nem kell semmit telepíteni
 1. Töltsd fel a mappát egy GitHub repóba (pl. `Prophet1218/Glass-Commander`).
 2. **Actions** fül → *Build* → lefut magától (vagy *Run workflow*).
-3. A végén az **Artifacts** alól töltsd le a `GlassCommander-win-x64` zipet, csomagold ki, és indítsd a `GlassCommander.exe`-t.
+3. A végén az **Artifacts** alól töltsd le a `Twinpane-x.y.z` zipet, csomagold ki, és indítsd a `Twinpane.exe`-t.
 
 ### B) Saját gépen
 - **Visual Studio 2022**: a telepítőben pipáld be a *WinUI application development* (vagy *.NET desktop development* + *Windows App SDK*) részt,
@@ -25,7 +27,7 @@ A **Releases** oldalon (jobb oldalt a repó főoldalán) minden verzióhoz két 
   ```
   dotnet publish src/GlassCommander/GlassCommander.csproj -c Release -r win-x64 -p:Platform=x64 --self-contained true -o publish
   ```
-  Ezután: `publish\GlassCommander.exe`
+  Ezután: `publish\Twinpane.exe`
 
 A program önálló (self-contained), a futtatáshoz nem kell külön .NET vagy Windows App SDK runtime.
 
@@ -75,4 +77,4 @@ Fájlokat egérrel is húzhatsz a panelek között, vagy az Intézőből be és 
 (alapból másol, **Shift**-tel mozgat; mappára ejtve a mappába kerül).
 
 A panelek automatikusan frissülnek, ha a mappa tartalma megváltozik. A megnyitott fülek, az ablakméret,
-a háttér és a rejtett fájlok beállítása megmarad (`%LOCALAPPDATA%\GlassCommander\settings.json`).
+a háttér és a rejtett fájlok beállítása megmarad (`%LOCALAPPDATA%\Twinpane\settings.json`).
