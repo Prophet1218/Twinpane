@@ -112,7 +112,7 @@ internal static class DriveTools
         long total = d.TotalSize, free = d.TotalFreeSpace, used = Math.Max(0, total - free);
         double pct = total > 0 ? used * 100.0 / total : 0;
         var accent = AccentBrush();
-        var track = new SolidColorBrush(Color.FromArgb(0x40, 0x80, 0x80, 0x80));
+        var track = new SolidColorBrush(Color.FromArgb(0x70, 0xA0, 0xA0, 0xA0));
 
         // --- Bal oldal: fánkdiagram + adatok
         var ring = new ProgressRing
@@ -146,11 +146,19 @@ internal static class DriveTools
 
         // --- Jobb oldal: mi foglalja a helyet
         var status = new TextBlock { FontSize = 12, Opacity = 0.7, TextTrimming = TextTrimming.CharacterEllipsis, Text = "Számolás indul…" };
+        // A sorok előre elkészülnek, és számolás közben csak a tartalmuk frissül:
+        // így az ablak nem ugrál és nem villog.
+        var rows = new UsageRow[MaxRows];
         var list = new StackPanel { Spacing = 10 };
+        for (int i = 0; i < MaxRows; i++)
+        {
+            rows[i] = new UsageRow(accent, track);
+            list.Children.Add(rows[i].Root);
+        }
         var right = new StackPanel { Spacing = 10, Width = 440 };
         right.Children.Add(new TextBlock { Text = "Mi foglalja a helyet?", FontSize = 16, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold });
         right.Children.Add(status);
-        right.Children.Add(new ScrollViewer { Content = list, MaxHeight = 380, Padding = new Thickness(0, 0, 14, 0) });
+        right.Children.Add(new ScrollViewer { Content = list, Height = 380, Padding = new Thickness(0, 0, 14, 0) });
 
         var layout = new Grid { ColumnSpacing = 32 };
         layout.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
@@ -178,23 +186,30 @@ internal static class DriveTools
         catch { }
 
         using var cts = new CancellationTokenSource();
-        _ = ComputeUsageAsync(root, used, list, status, accent, cts.Token);
+        // Csak a megnyitási animáció után kezdünk számolni.
+        dlg.Opened += (_, _) => _ = ComputeUsageAsync(root, used, rows, status, cts.Token);
 
         var result = await dlg.ShowAsync();
         cts.Cancel();
         if (result == ContentDialogResult.Primary) ShellOps.ShowProperties(hwnd, root);
     }
 
-    private static async Task ComputeUsageAsync(string root, long used, StackPanel list, TextBlock status,
-                                                Brush accent, CancellationToken ct)
+    private const int MaxRows = 14;
+
+    private static readonly string[] SwapFiles = { "pagefile.sys", "hiberfil.sys", "swapfile.sys" };
+
+    private static async Task ComputeUsageAsync(string root, long used, UsageRow[] rows, TextBlock status,
+                                                CancellationToken ct)
     {
         var results = new List<(string Name, long Size)>();
         try
         {
             var dirOpts = new EnumerationOptions { IgnoreInaccessible = true, AttributesToSkip = FileAttributes.ReparsePoint };
             var dirs = await Task.Run(() => new DirectoryInfo(root).EnumerateDirectories("*", dirOpts).ToList(), ct);
-            long rootFiles = await Task.Run(() =>
-                new DirectoryInfo(root).EnumerateFiles("*", dirOpts).Sum(f => f.Length), ct);
+            var files = await Task.Run(() => new DirectoryInfo(root).EnumerateFiles("*", dirOpts)
+                .Select(f => (f.Name, f.Length)).ToList(), ct);
+            long swap = files.Where(f => SwapFiles.Contains(f.Name, StringComparer.OrdinalIgnoreCase)).Sum(f => f.Length);
+            long rootFiles = files.Sum(f => f.Length) - swap;
 
             int n = 0;
             foreach (var dir in dirs)
@@ -204,14 +219,15 @@ internal static class DriveTools
                 status.Text = $"Számolás ({n}/{dirs.Count}): {dir.Name}…";
                 long size = await Task.Run(() => DirSize(dir.FullName, ct), ct);
                 results.Add((dir.Name, size));
-                Render(list, results, accent);
+                Render(rows, results);
             }
 
-            if (rootFiles > 0) results.Add(("Fájlok a meghajtó gyökerében", rootFiles));
+            if (swap > 0) results.Add(("Lapozó- és hibernációs fájl (pagefile, hiberfil)", swap));
+            if (rootFiles > 0) results.Add(("Egyéb fájlok a meghajtó gyökerében", rootFiles));
             long counted = results.Sum(r => r.Size);
             if (used - counted > 64L * 1024 * 1024)
                 results.Add(("Egyéb (rendszerfájlok, nem elérhető mappák)", used - counted));
-            Render(list, results, accent);
+            Render(rows, results);
             status.Text = $"Kész – {results.Count} tétel. A mappák méretét a bennük lévő fájlok alapján számoltam.";
         }
         catch (OperationCanceledException) { }
@@ -244,30 +260,54 @@ internal static class DriveTools
         return sum;
     }
 
-    private static void Render(StackPanel list, List<(string Name, long Size)> results, Brush accent)
+    private static void Render(UsageRow[] rows, List<(string Name, long Size)> results)
     {
-        var top = results.OrderByDescending(r => r.Size).Take(14).ToList();
+        var top = results.OrderByDescending(r => r.Size).Take(rows.Length).ToList();
         long max = top.Count > 0 ? Math.Max(1, top[0].Size) : 1;
-        list.Children.Clear();
-        foreach (var (name, size) in top)
+        for (int i = 0; i < rows.Length; i++)
         {
-            var row = new Grid { RowSpacing = 4 };
-            row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-            row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-            row.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-            row.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-
-            row.Children.Add(new TextBlock { Text = name, TextTrimming = TextTrimming.CharacterEllipsis });
-            var sz = new TextBlock { Text = FileItem.FormatSize(size), Opacity = 0.75, Margin = new Thickness(12, 0, 0, 0) };
-            Grid.SetColumn(sz, 1);
-            row.Children.Add(sz);
-
-            var bar = new ProgressBar { Minimum = 0, Maximum = 100, Value = size * 100.0 / max, Foreground = accent, MinHeight = 6 };
-            Grid.SetRow(bar, 1);
-            Grid.SetColumnSpan(bar, 2);
-            row.Children.Add(bar);
-            list.Children.Add(row);
+            if (i < top.Count) rows[i].Set(top[i].Name, top[i].Size, max);
+            else rows[i].Clear();
         }
+    }
+
+    /// <summary>Egy sor a "Mi foglalja a helyet?" listában (név, méret, sáv).</summary>
+    private sealed class UsageRow
+    {
+        public readonly Grid Root;
+        private readonly TextBlock _name;
+        private readonly TextBlock _size;
+        private readonly ProgressBar _bar;
+
+        public UsageRow(Brush accent, Brush track)
+        {
+            Root = new Grid { RowSpacing = 4, Opacity = 0 };
+            Root.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            Root.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            Root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+            Root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+
+            _name = new TextBlock { TextTrimming = TextTrimming.CharacterEllipsis };
+            Root.Children.Add(_name);
+            _size = new TextBlock { Opacity = 0.75, Margin = new Thickness(12, 0, 0, 0) };
+            Grid.SetColumn(_size, 1);
+            Root.Children.Add(_size);
+
+            _bar = new ProgressBar { Minimum = 0, Maximum = 100, Foreground = accent, Background = track, MinHeight = 6 };
+            Grid.SetRow(_bar, 1);
+            Grid.SetColumnSpan(_bar, 2);
+            Root.Children.Add(_bar);
+        }
+
+        public void Set(string name, long size, long max)
+        {
+            _name.Text = name;
+            _size.Text = FileItem.FormatSize(size);
+            _bar.Value = size * 100.0 / max;
+            Root.Opacity = 1;
+        }
+
+        public void Clear() => Root.Opacity = 0;
     }
 
     private static UIElement LegendRow(Brush brush, string label, long bytes)
