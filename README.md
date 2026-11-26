@@ -1,7 +1,15 @@
-# Glass Commander 1.1.0
+# Glass Commander 1.2.0
 
 Kétpaneles fájlkezelő Windows 11-re: a Total Commander működése, natív WinUI 3-as felülettel
 (Mica / Acrylic háttér, Fluent ikonok, lekerekített kártyák, világos/sötét téma a rendszer szerint).
+
+## Letöltés
+
+A **Releases** oldalon (jobb oldalt a repó főoldalán) minden verzióhoz két fájl van:
+
+- **GlassCommander-x.y.z-Setup.exe** – telepítő: Start menü, asztali ikon (választható), eltávolítás a Gépházból.
+  Rendszergazdai jog nélkül is települ.
+- **GlassCommander-x.y.z-portable.zip** – hordozható változat: kicsomagolod, és fut, telepítés nélkül.
 
 ## Fordítás
 
@@ -31,6 +39,7 @@ A program önálló (self-contained), a futtatáshoz nem kell külön .NET vagy 
 | Ctrl+↑ | A kijelölt mappa megnyitása új fülön |
 | Gépelés a listában | Gyorskereső: ráugrik az első egyező fájlra |
 | Ctrl+Q | Gyorsnézet a másik panelben (képek, szövegek, mappák) |
+| Alt+F7 / Ctrl+F | Kereső: név, joker (*.pdf), tartalom; egy mappában vagy minden meghajtón |
 | Enter / dupla katt | Megnyitás / belépés a mappába |
 | Backspace, Alt+↑ | Szülőmappa |
 | Alt+← | Vissza |
@@ -55,6 +64,9 @@ A program önálló (self-contained), a futtatáshoz nem kell külön .NET vagy 
 | Ctrl+I | A másik panel is ugyanide lép |
 | Ctrl+Shift+T | Windows Terminal az aktuális mappában |
 | Ctrl+E | Megnyitás Intézőben |
+
+A panelek tetején a meghajtógombokkal (c, d, …) lehet meghajtót váltani; az aktuális meghajtó gombja a gyökérbe visz.
+Új meghajtó (pl. pendrive) csatlakoztatásakor a gomb magától megjelenik.
 
 A másolás/mozgatás/törlés a Windows saját motorjával megy: natív folyamatjelzőt kapsz,
 ütközésnél "Csere / Kihagyás" ablakot, a Lomtárba került fájlokat pedig vissza lehet állítani.
