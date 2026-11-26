@@ -48,6 +48,8 @@ public sealed partial class MainWindow : Window
         LeftPane.DropRequested += OnPaneDrop;
         RightPane.DropRequested += OnPaneDrop;
         LeftPane.CurrentItemChanged += OnPaneCurrentItemChanged;
+        LeftPane.DriveCommandRequested += OnDriveCommand;
+        RightPane.DriveCommandRequested += OnDriveCommand;
         RightPane.CurrentItemChanged += OnPaneCurrentItemChanged;
 
         Root.Loaded += Root_Loaded;
@@ -96,6 +98,40 @@ public sealed partial class MainWindow : Window
         RightPane.IsActive = !left;
         if (changed && _previewOn) UpdatePreview(reposition: true);
         if (focus) Active.FocusList();
+    }
+
+    // ------------------------------------------------------------------ Meghajtók
+
+    private async void OnDriveCommand(FilePane pane, string root, string cmd)
+    {
+        SetActive(pane == LeftPane, focus: false);
+        try
+        {
+            switch (cmd)
+            {
+                case "open": await pane.GoToDriveAsync(root); break;
+                case "opentab": await pane.OpenDriveInNewTabAsync(root); break;
+                case "props": await DriveTools.ShowPropertiesAsync(Root.XamlRoot, root, _hwnd); break;
+                case "winprops": ShellOps.ShowProperties(_hwnd, root); break;
+                case "format":
+                    DriveTools.Format(_hwnd, root);
+                    await RefreshBothAsync();
+                    break;
+                case "eject":
+                    var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+                    // Előbb kilépünk a meghajtóról, különben a Windows "használatban van" hibát adhat.
+                    await LeftPane.LeaveDriveAsync(root, home);
+                    await RightPane.LeaveDriveAsync(root, home);
+                    if (!await DriveTools.EjectAsync(root))
+                        await Dialogs.ErrorAsync(Root.XamlRoot,
+                            $"A(z) {root.TrimEnd('\\')} meghajtót nem sikerült kiadni. Lehet, hogy egy program még használja.");
+                    LeftPane.ReloadDrives();
+                    RightPane.ReloadDrives();
+                    break;
+            }
+        }
+        catch (Exception ex) { await Dialogs.ErrorAsync(Root.XamlRoot, ex.Message); }
+        Active.FocusList();
     }
 
     // ------------------------------------------------------------------ Kereső

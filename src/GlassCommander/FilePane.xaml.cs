@@ -25,6 +25,9 @@ public sealed partial class FilePane : UserControl
     /// <summary>Fájlokat ejtettek a panelre: (forrás útvonalak, célmappa, mozgatás?).</summary>
     public event Action<FilePane, IReadOnlyList<string>, string, bool>? DropRequested;
 
+    /// <summary>Meghajtógomb jobb klikkes menüjéből kért művelet: (meghajtó gyökere, parancs).</summary>
+    public event Action<FilePane, string, string>? DriveCommandRequested;
+
     /// <summary>Változott a kurzor alatti elem (a gyorsnézethez).</summary>
     public event EventHandler? CurrentItemChanged;
 
@@ -409,6 +412,7 @@ public sealed partial class FilePane : UserControl
             };
             ToolTipService.SetToolTip(btn, tip);
             btn.Click += DriveButton_Click;
+            btn.RightTapped += DriveButton_RightTapped;
             DriveBar.Children.Add(btn);
             IconService.RequestPath(d.Name, DispatcherQueue, src => img.Source = src);
         }
@@ -422,6 +426,57 @@ public sealed partial class FilePane : UserControl
         foreach (var b in DriveBar.Children.OfType<ToggleButton>())
             b.IsChecked = string.Equals(b.Tag as string, root, StringComparison.OrdinalIgnoreCase);
     }
+
+    private void DriveButton_RightTapped(object sender, RightTappedRoutedEventArgs e)
+    {
+        if (sender is not ToggleButton { Tag: string root } btn) return;
+        e.Handled = true;
+        Activated?.Invoke(this, EventArgs.Empty);
+
+        DriveInfo? d = null;
+        try { d = new DriveInfo(root); } catch { }
+
+        var menu = new MenuFlyout();
+        void Add(string text, string glyph, string cmd, bool enabled = true)
+        {
+            var mi = new MenuFlyoutItem { Text = text, Icon = new FontIcon { Glyph = glyph }, IsEnabled = enabled };
+            mi.Click += (_, _) => DriveCommandRequested?.Invoke(this, root, cmd);
+            menu.Items.Add(mi);
+        }
+
+        string title = root.TrimEnd('\\');
+        try { if (d != null && d.IsReady && d.VolumeLabel.Length > 0) title = $"{d.VolumeLabel} ({title})"; } catch { }
+        menu.Items.Add(new MenuFlyoutItem { Text = title, IsEnabled = false });
+        menu.Items.Add(new MenuFlyoutSeparator());
+        Add("Megnyitás", "", "open");
+        Add("Megnyitás új fülön", "", "opentab");
+        if (d != null && (DriveTools.CanEject(d) || DriveTools.CanFormat(d)))
+        {
+            menu.Items.Add(new MenuFlyoutSeparator());
+            if (DriveTools.CanEject(d)) Add("Kiadás", "", "eject");
+            if (DriveTools.CanFormat(d)) Add("Formázás…", "", "format");
+        }
+        menu.Items.Add(new MenuFlyoutSeparator());
+        Add("Tulajdonságok", "", "props");
+        Add("Windows-tulajdonságok", "", "winprops");
+        menu.ShowAt(btn, e.GetPosition(btn));
+    }
+
+    /// <summary>Ha a panel az adott meghajtón áll (pl. kiadás után), átlép máshová.</summary>
+    public async Task LeaveDriveAsync(string root, string fallback)
+    {
+        if (CurrentPath.Length > 0 && string.Equals(Path.GetPathRoot(CurrentPath), root, StringComparison.OrdinalIgnoreCase))
+            await NavigateAsync(fallback, pushHistory: false);
+        LoadDrives();
+    }
+
+    public async Task GoToDriveAsync(string root)
+    {
+        await NavigateAsync(root);
+        FocusList();
+    }
+
+    public async Task OpenDriveInNewTabAsync(string root) => await NewTabAsync(root);
 
     private async void DriveButton_Click(object sender, RoutedEventArgs e)
     {
