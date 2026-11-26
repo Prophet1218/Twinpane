@@ -17,12 +17,22 @@ internal sealed class AppSettings
 
     private static string FilePath => Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+        "Twinpane", "settings.json");
+
+    // A program régi neve alatt mentett beállítások (átvesszük őket az első indításkor).
+    private static string OldFilePath => Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
         "GlassCommander", "settings.json");
 
     public static AppSettings Load()
     {
         try
         {
+            if (!File.Exists(FilePath) && File.Exists(OldFilePath))
+            {
+                Directory.CreateDirectory(Path.GetDirectoryName(FilePath)!);
+                File.Copy(OldFilePath, FilePath);
+            }
             if (File.Exists(FilePath))
                 return JsonSerializer.Deserialize<AppSettings>(File.ReadAllText(FilePath)) ?? new AppSettings();
         }
