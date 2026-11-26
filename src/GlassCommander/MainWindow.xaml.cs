@@ -17,6 +17,7 @@ public sealed partial class MainWindow : Window
     private readonly IntPtr _hwnd;
     private bool _leftActive = true;
     private bool _previewOn;
+    private SearchWindow? _search;
 
     private FilePane Active => _leftActive ? LeftPane : RightPane;
     private FilePane Other => _leftActive ? RightPane : LeftPane;
@@ -32,12 +33,7 @@ public sealed partial class MainWindow : Window
         AppWindow.Resize(new SizeInt32(Math.Max(900, _settings.Width), Math.Max(600, _settings.Height)));
 
         ApplyBackdrop(_settings.Backdrop);
-        try
-        {
-            var icon = Path.Combine(AppContext.BaseDirectory, "app.ico");
-            if (File.Exists(icon)) AppWindow.SetIcon(icon);
-        }
-        catch { }
+        AppIcon.Apply(AppWindow);
 
         var v = typeof(App).Assembly.GetName().Version;
         VersionText.Text = v == null ? "" : $"v{v.Major}.{v.Minor}.{v.Build}";
@@ -89,6 +85,7 @@ public sealed partial class MainWindow : Window
         _settings.Save();
         LeftPane.Shutdown();
         RightPane.Shutdown();
+        try { _search?.Close(); } catch { }
     }
 
     private void SetActive(bool left, bool focus)
@@ -100,6 +97,32 @@ public sealed partial class MainWindow : Window
         if (changed && _previewOn) UpdatePreview(reposition: true);
         if (focus) Active.FocusList();
     }
+
+    // ------------------------------------------------------------------ Kereső
+
+    private void OpenSearch()
+    {
+        if (_search != null)
+        {
+            _search.SetFolder(Active.CurrentPath);
+            _search.Activate();
+            return;
+        }
+        _search = new SearchWindow(Active.CurrentPath, _settings.Backdrop, GoToFoundAsync);
+        _search.Closed += (_, _) => _search = null;
+        _search.Activate();
+    }
+
+    /// <summary>Kereső találat: az aktív panel a fájl mappájába lép, és kijelöli.</summary>
+    private async Task GoToFoundAsync(string folder, string name)
+    {
+        if (_previewOn) TogglePreview();
+        await Active.NavigateAsync(folder, focusName: name);
+        Activate();
+        Active.FocusList();
+    }
+
+    private void Search_Click(object sender, RoutedEventArgs e) => OpenSearch();
 
     // ------------------------------------------------------------------ Gyorsnézet
 
@@ -222,7 +245,13 @@ public sealed partial class MainWindow : Window
             case VirtualKey.F5: action = () => CopyMoveAsync(move: false); break;
             case VirtualKey.F6 when shift: action = RenameAsync; break;
             case VirtualKey.F6: action = () => CopyMoveAsync(move: true); break;
+            case VirtualKey.F7 when alt:
+                action = () => { OpenSearch(); return Task.CompletedTask; };
+                break;
             case VirtualKey.F7: action = NewFolderAsync; break;
+            case VirtualKey.F when ctrl:
+                action = () => { OpenSearch(); return Task.CompletedTask; };
+                break;
             case VirtualKey.F8: action = () => DeleteAsync(permanent: shift); break;
             case VirtualKey.Delete when inList: action = () => DeleteAsync(permanent: shift); break;
 

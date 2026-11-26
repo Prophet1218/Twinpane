@@ -18,7 +18,7 @@ internal static class IconService
 
     // Csak a UI szálról érjük el:
     private static readonly Dictionary<string, ImageSource?> Cache = new();
-    private static readonly Dictionary<string, List<FileItem>> Waiting = new();
+    private static readonly Dictionary<string, List<Action<ImageSource>>> Waiting = new();
 
     private static readonly BlockingCollection<IconRequest> Queue = new();
     private static DispatcherQueue? _ui;
@@ -26,27 +26,36 @@ internal static class IconService
 
     public static void Request(IEnumerable<FileItem> items, DispatcherQueue ui)
     {
-        _ui ??= ui;
-        EnsureWorker();
-
         foreach (var item in items)
         {
             var key = item.IconKey;
             if (key == null) continue;
-
-            if (Cache.TryGetValue(key, out var src))
-            {
-                if (src != null) item.Icon = src;
-                continue;
-            }
-            if (Waiting.TryGetValue(key, out var list))
-            {
-                list.Add(item);
-                continue;
-            }
-            Waiting[key] = new List<FileItem> { item };
-            Queue.Add(new IconRequest(key, item.FullPath));
+            var target = item;
+            RequestKey(key, item.FullPath, ui, src => target.Icon = src);
         }
+    }
+
+    /// <summary>Egy tetszőleges útvonal (pl. meghajtó) ikonja; az apply a UI szálon fut.</summary>
+    public static void RequestPath(string path, DispatcherQueue ui, Action<ImageSource> apply)
+        => RequestKey("path:" + path, path, ui, apply);
+
+    private static void RequestKey(string key, string path, DispatcherQueue ui, Action<ImageSource> apply)
+    {
+        _ui ??= ui;
+        EnsureWorker();
+
+        if (Cache.TryGetValue(key, out var src))
+        {
+            if (src != null) apply(src);
+            return;
+        }
+        if (Waiting.TryGetValue(key, out var list))
+        {
+            list.Add(apply);
+            return;
+        }
+        Waiting[key] = new List<Action<ImageSource>> { apply };
+        Queue.Add(new IconRequest(key, path));
     }
 
     private static void EnsureWorker()
@@ -85,8 +94,11 @@ internal static class IconService
         }
 
         Cache[res.Key] = src;
-        if (Waiting.Remove(res.Key, out var items) && src != null)
-            foreach (var i in items) i.Icon = src;
+        if (Waiting.Remove(res.Key, out var actions) && src != null)
+            foreach (var a in actions)
+            {
+                try { a(src); } catch { }
+            }
     }
 
     // ------------------------------------------------------------------ Win32

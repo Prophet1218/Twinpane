@@ -41,6 +41,7 @@
                     <RowDefinition Height="Auto" />
                     <RowDefinition Height="Auto" />
                     <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
                     <RowDefinition Height="*" />
                     <RowDefinition Height="Auto" />
                 </Grid.RowDefinitions>
@@ -60,8 +61,16 @@
                          TabCloseRequested="Tabs_TabCloseRequested"
                          SelectionChanged="Tabs_SelectionChanged" />
 
+                <!-- Meghajtógombok (mint a Total Commanderben) -->
+                <ScrollViewer Grid.Row="1"
+                              HorizontalScrollBarVisibility="Auto" HorizontalScrollMode="Auto"
+                              VerticalScrollBarVisibility="Disabled" VerticalScrollMode="Disabled"
+                              Padding="8,6,8,0">
+                    <StackPanel x:Name="DriveBar" Orientation="Horizontal" Spacing="4" />
+                </ScrollViewer>
+
                 <!-- Navigációs sor -->
-                <Grid Grid.Row="1" Padding="8,6,8,6" ColumnSpacing="4">
+                <Grid Grid.Row="2" Padding="8,6,8,6" ColumnSpacing="4">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="Auto" />
                         <ColumnDefinition Width="Auto" />
@@ -90,7 +99,7 @@
                 </Grid>
 
                 <!-- Oszlopfejléc -->
-                <Grid Grid.Row="2" Padding="4,0,14,2"
+                <Grid Grid.Row="3" Padding="4,0,14,2"
                       BorderThickness="0,0,0,1"
                       BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}">
                     <Grid.ColumnDefinitions>
@@ -107,7 +116,7 @@
                 </Grid>
 
                 <!-- Fájllista -->
-                <ListView x:Name="FileList" Grid.Row="3"
+                <ListView x:Name="FileList" Grid.Row="4"
                           SelectionMode="Extended"
                           IsDoubleTapEnabled="True"
                           CanDragItems="True"
@@ -165,7 +174,7 @@
                 </ListView>
 
                 <!-- Gyorskereső (gépeléskor jelenik meg) -->
-                <Border x:Name="SearchBox" Grid.Row="3"
+                <Border x:Name="SearchBox" Grid.Row="4"
                         Visibility="Collapsed"
                         HorizontalAlignment="Right" VerticalAlignment="Bottom"
                         Margin="12" Padding="12,7,14,7" CornerRadius="8"
@@ -182,7 +191,7 @@
                 </Border>
 
                 <!-- Állapotsor -->
-                <Grid Grid.Row="4" Padding="14,6,14,8"
+                <Grid Grid.Row="5" Padding="14,6,14,8"
                       BorderThickness="0,1,0,0"
                       BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}">
                     <Grid.ColumnDefinitions>

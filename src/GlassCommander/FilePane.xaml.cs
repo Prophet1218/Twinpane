@@ -3,6 +3,7 @@ using Microsoft.UI.Dispatching;
 using Microsoft.UI.Input;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Controls.Primitives;
 using Microsoft.UI.Xaml.Input;
 using Windows.ApplicationModel.DataTransfer;
 using Windows.ApplicationModel.DataTransfer.DragDrop;
@@ -53,6 +54,8 @@ public sealed partial class FilePane : UserControl
     private bool _isActive;
     private FileSystemWatcher? _watcher;
     private readonly DispatcherQueueTimer _refreshTimer;
+    private readonly DispatcherQueueTimer _driveTimer;
+    private string _driveSignature = "";
     private readonly MenuFlyout _menu = new();
 
     public FilePane()
@@ -74,6 +77,20 @@ public sealed partial class FilePane : UserControl
         {
             if (OnSearchChar(e.Character)) e.Handled = true;
         };
+
+        // Új meghajtó (pl. pendrive) felismerése
+        _driveTimer = DispatcherQueue.CreateTimer();
+        _driveTimer.Interval = TimeSpan.FromSeconds(3);
+        _driveTimer.IsRepeating = true;
+        _driveTimer.Tick += (_, _) =>
+        {
+            try
+            {
+                if (DriveSignature() != _driveSignature) LoadDrives();
+            }
+            catch { }
+        };
+        _driveTimer.Start();
 
         BuildMenu();
         LoadDrives();
@@ -346,20 +363,78 @@ public sealed partial class FilePane : UserControl
 
     // ------------------------------------------------------------------ Meghajtók
 
+    private static string DriveSignature() => string.Join("|", DriveInfo.GetDrives().Select(d => d.Name));
+
     private void LoadDrives()
     {
         _suppressDriveChange = true;
         DriveBox.Items.Clear();
-        foreach (var d in DriveInfo.GetDrives())
+        DriveBar.Children.Clear();
+        var drives = DriveInfo.GetDrives();
+        _driveSignature = string.Join("|", drives.Select(d => d.Name));
+
+        foreach (var d in drives)
         {
-            string label = "";
-            try { if (d.IsReady) label = d.VolumeLabel; } catch { }
+            string label = "", tip = d.Name;
+            try
+            {
+                if (d.IsReady)
+                {
+                    label = d.VolumeLabel;
+                    tip = $"{d.Name}  {label}\nSzabad: {FileItem.FormatSize(d.AvailableFreeSpace)} / {FileItem.FormatSize(d.TotalSize)}";
+                }
+            }
+            catch { }
+
             var item = new ComboBoxItem { Content = d.Name.TrimEnd('\\'), Tag = d.Name };
             ToolTipService.SetToolTip(item, string.IsNullOrEmpty(label) ? d.Name : $"{d.Name}  {label}");
             DriveBox.Items.Add(item);
+
+            // Gomb a meghajtósávba: ikon + betű
+            var img = new Image { Width = 16, Height = 16 };
+            var content = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6 };
+            content.Children.Add(img);
+            content.Children.Add(new TextBlock
+            {
+                Text = d.Name.Substring(0, 1).ToLowerInvariant(),
+                VerticalAlignment = VerticalAlignment.Center,
+            });
+            var btn = new ToggleButton
+            {
+                Content = content,
+                Tag = d.Name,
+                Padding = new Thickness(8, 3, 10, 3),
+                MinWidth = 0,
+                AllowFocusOnInteraction = false,
+            };
+            ToolTipService.SetToolTip(btn, tip);
+            btn.Click += DriveButton_Click;
+            DriveBar.Children.Add(btn);
+            IconService.RequestPath(d.Name, DispatcherQueue, src => img.Source = src);
         }
         _suppressDriveChange = false;
         SelectDriveInBox();
+    }
+
+    private void UpdateDriveButtons()
+    {
+        var root = CurrentPath.Length > 0 ? Path.GetPathRoot(CurrentPath) : null;
+        foreach (var b in DriveBar.Children.OfType<ToggleButton>())
+            b.IsChecked = string.Equals(b.Tag as string, root, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private async void DriveButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not ToggleButton { Tag: string root }) return;
+        UpdateDriveButtons();   // a kattintás átbillentette, visszaállítjuk
+        Activated?.Invoke(this, EventArgs.Empty);
+
+        bool same = CurrentPath.Length > 0 &&
+                    string.Equals(Path.GetPathRoot(CurrentPath), root, StringComparison.OrdinalIgnoreCase);
+        // Az aktuális meghajtó gombja a gyökérbe visz (mint a TC-ben), a többi oda, ahol legutóbb jártál.
+        var target = !same && _lastPathPerDrive.TryGetValue(root, out var last) && Directory.Exists(last) ? last : root;
+        await NavigateAsync(target);
+        FocusList();
     }
 
     private void SelectDriveInBox()
@@ -369,6 +444,7 @@ public sealed partial class FilePane : UserControl
         DriveBox.SelectedItem = DriveBox.Items.OfType<ComboBoxItem>()
             .FirstOrDefault(i => string.Equals(i.Tag as string, root, StringComparison.OrdinalIgnoreCase));
         _suppressDriveChange = false;
+        UpdateDriveButtons();
     }
 
     private async void DriveBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -428,6 +504,7 @@ public sealed partial class FilePane : UserControl
     public void Shutdown()
     {
         _refreshTimer.Stop();
+        _driveTimer.Stop();
         _watcher?.Dispose();
         _watcher = null;
     }

@@ -48,6 +48,9 @@
             <AppBarButton Label="Beillesztés" Click="Paste_Click" ToolTipService.ToolTip="Ctrl+V" AllowFocusOnInteraction="False">
                 <AppBarButton.Icon><FontIcon Glyph="&#xE77F;" /></AppBarButton.Icon>
             </AppBarButton>
+            <AppBarButton Label="Keresés" Click="Search_Click" ToolTipService.ToolTip="Alt+F7 / Ctrl+F" AllowFocusOnInteraction="False">
+                <AppBarButton.Icon><FontIcon Glyph="&#xE721;" /></AppBarButton.Icon>
+            </AppBarButton>
             <AppBarSeparator />
             <AppBarToggleButton x:Name="HiddenToggle" Label="Rejtett fájlok" Click="Hidden_Click"
                                 ToolTipService.ToolTip="Ctrl+H" AllowFocusOnInteraction="False">

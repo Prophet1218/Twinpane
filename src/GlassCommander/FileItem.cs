@@ -90,6 +90,9 @@ public sealed class FileItem : INotifyPropertyChanged
     public FileAttributes Attributes { get; }
     public FileKind Kind { get; }
 
+    /// <summary>A tartalmazó mappa (a keresési találatokhoz).</summary>
+    public string Folder => Path.GetDirectoryName(FullPath) ?? "";
+
     public string BaseName { get; }
     public string Extension { get; }
 
