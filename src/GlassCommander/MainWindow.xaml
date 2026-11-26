@@ -124,5 +124,33 @@
                 <StackPanel Orientation="Horizontal" Spacing="8"><TextBlock Text="F8" Style="{StaticResource FnKey}" /><TextBlock Text="Töröl" /></StackPanel>
             </Button>
         </Grid>
+
+        <!-- Saját párbeszéd-réteg (pl. meghajtó tulajdonságai): animáció és áttetsző villanás nélkül -->
+        <Grid x:Name="Overlay" Grid.RowSpan="4" Visibility="Collapsed" Background="#99000000">
+            <Border HorizontalAlignment="Center" VerticalAlignment="Center"
+                    MaxWidth="1040" Margin="24" Padding="28,24,28,24" CornerRadius="8"
+                    BorderThickness="1"
+                    BorderBrush="{ThemeResource SurfaceStrokeColorDefaultBrush}"
+                    Background="{ThemeResource SolidBackgroundFillColorBaseBrush}">
+                <Grid RowSpacing="20">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+                    <TextBlock x:Name="OverlayTitle" Style="{StaticResource SubtitleTextBlockStyle}" TextTrimming="CharacterEllipsis" />
+                    <ContentPresenter x:Name="OverlayContent" Grid.Row="1" />
+                    <Grid Grid.Row="2" ColumnSpacing="8">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <Button x:Name="OverlayPrimary" HorizontalAlignment="Stretch" Click="OverlayPrimary_Click" />
+                        <Button x:Name="OverlayClose" Grid.Column="1" HorizontalAlignment="Stretch"
+                                Style="{StaticResource AccentButtonStyle}" Click="OverlayClose_Click" />
+                    </Grid>
+                </Grid>
+            </Border>
+        </Grid>
     </Grid>
 </Window>

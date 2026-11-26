@@ -111,7 +111,7 @@ public sealed partial class MainWindow : Window
             {
                 case "open": await pane.GoToDriveAsync(root); break;
                 case "opentab": await pane.OpenDriveInNewTabAsync(root); break;
-                case "props": await DriveTools.ShowPropertiesAsync(Root.XamlRoot, root, _hwnd); break;
+                case "props": await ShowDrivePropertiesAsync(root); break;
                 case "winprops": ShellOps.ShowProperties(_hwnd, root); break;
                 case "format":
                     DriveTools.Format(_hwnd, root);
@@ -133,6 +133,54 @@ public sealed partial class MainWindow : Window
         catch (Exception ex) { await Dialogs.ErrorAsync(Root.XamlRoot, ex.Message); }
         Active.FocusList();
     }
+
+    private async Task ShowDrivePropertiesAsync(string root)
+    {
+        var view = DriveTools.CreateProperties(root);
+        if (view == null)
+        {
+            await Dialogs.ErrorAsync(Root.XamlRoot, $"A(z) {root.TrimEnd('\\')} meghajtó nem elérhető (nincs benne lemez?).");
+            return;
+        }
+        using var cts = new CancellationTokenSource();
+        var closed = ShowOverlayAsync(view.Title, view.Content, "Windows-tulajdonságok", "Bezárás");
+        _ = view.StartAsync(cts.Token);
+        bool primary = await closed;
+        cts.Cancel();
+        if (primary) ShellOps.ShowProperties(_hwnd, root);
+    }
+
+    // ------------------------------------------------------------------ Saját párbeszéd-réteg
+
+    private TaskCompletionSource<bool>? _overlayTcs;
+
+    private bool OverlayOpen => Overlay.Visibility == Visibility.Visible;
+
+    private Task<bool> ShowOverlayAsync(string title, UIElement content, string primaryText, string closeText)
+    {
+        _overlayTcs?.TrySetResult(false);
+        OverlayTitle.Text = title;
+        OverlayContent.Content = content;
+        OverlayPrimary.Content = primaryText;
+        OverlayClose.Content = closeText;
+        Overlay.Visibility = Visibility.Visible;
+        OverlayClose.Focus(FocusState.Programmatic);
+        _overlayTcs = new TaskCompletionSource<bool>();
+        return _overlayTcs.Task;
+    }
+
+    private void CloseOverlay(bool primary)
+    {
+        Overlay.Visibility = Visibility.Collapsed;
+        OverlayContent.Content = null;
+        var tcs = _overlayTcs;
+        _overlayTcs = null;
+        tcs?.TrySetResult(primary);
+        Active.FocusList();
+    }
+
+    private void OverlayPrimary_Click(object sender, RoutedEventArgs e) => CloseOverlay(true);
+    private void OverlayClose_Click(object sender, RoutedEventArgs e) => CloseOverlay(false);
 
     // ------------------------------------------------------------------ Kereső
 
@@ -192,7 +240,7 @@ public sealed partial class MainWindow : Window
 
     private void OnPaneCurrentItemChanged(object? sender, EventArgs e)
     {
-        if (_previewOn && sender == Active) UpdatePreview();
+        if (_previewOn && ReferenceEquals(sender, Active)) UpdatePreview();
     }
 
     private void Preview_Click(object sender, RoutedEventArgs e)
@@ -249,6 +297,15 @@ public sealed partial class MainWindow : Window
     private async void Root_PreviewKeyDown(object sender, KeyRoutedEventArgs e)
     {
         if (Dialogs.IsOpen) return;
+        if (OverlayOpen)
+        {
+            if (e.Key == VirtualKey.Escape)
+            {
+                e.Handled = true;
+                CloseOverlay(false);
+            }
+            return;
+        }
 
         bool ctrl = IsDown(VirtualKey.Control);
         bool shift = IsDown(VirtualKey.Shift);

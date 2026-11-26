@@ -100,14 +100,19 @@ internal static class DriveTools
 
     // ------------------------------------------------------------------ Tulajdonságok
 
-    public static async Task ShowPropertiesAsync(XamlRoot xamlRoot, string root, IntPtr hwnd)
+    /// <summary>A Tulajdonságok tartalma; a főablak saját rétegen (overlay) mutatja meg.</summary>
+    public sealed class PropertiesView
+    {
+        public required string Title { get; init; }
+        public required UIElement Content { get; init; }
+        public required Func<CancellationToken, Task> StartAsync { get; init; }
+    }
+
+    /// <summary>null, ha a meghajtó nem elérhető (pl. üres DVD-meghajtó).</summary>
+    public static PropertiesView? CreateProperties(string root)
     {
         var d = new DriveInfo(root);
-        if (!d.IsReady)
-        {
-            await Dialogs.ErrorAsync(xamlRoot, $"A(z) {root} meghajtó nem elérhető (nincs benne lemez?).");
-            return;
-        }
+        if (!d.IsReady) return null;
 
         long total = d.TotalSize, free = d.TotalFreeSpace, used = Math.Max(0, total - free);
         double pct = total > 0 ? used * 100.0 / total : 0;
@@ -169,29 +174,12 @@ internal static class DriveTools
 
         string label = "";
         try { label = d.VolumeLabel; } catch { }
-        var dlg = new ContentDialog
+        return new PropertiesView
         {
-            XamlRoot = xamlRoot,
             Title = string.IsNullOrEmpty(label) ? $"{TypeName(d.DriveType)} ({root.TrimEnd('\\')})" : $"{label} ({root.TrimEnd('\\')})",
             Content = layout,
-            PrimaryButtonText = "Windows-tulajdonságok",
-            CloseButtonText = "Bezárás",
-            DefaultButton = ContentDialogButton.Close,
+            StartAsync = ct => ComputeUsageAsync(root, used, rows, status, ct),
         };
-        dlg.Resources["ContentDialogMaxWidth"] = 1000.0;
-        try
-        {
-            if (Application.Current.Resources["DefaultContentDialogStyle"] is Style st) dlg.Style = st;
-        }
-        catch { }
-
-        using var cts = new CancellationTokenSource();
-        // Csak a megnyitási animáció után kezdünk számolni.
-        dlg.Opened += (_, _) => _ = ComputeUsageAsync(root, used, rows, status, cts.Token);
-
-        var result = await dlg.ShowAsync();
-        cts.Cancel();
-        if (result == ContentDialogResult.Primary) ShellOps.ShowProperties(hwnd, root);
     }
 
     private const int MaxRows = 14;
