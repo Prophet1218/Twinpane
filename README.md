@@ -1,4 +1,4 @@
-# Glass Commander 1.0.0
+# Glass Commander 1.1.0
 
 Kétpaneles fájlkezelő Windows 11-re: a Total Commander működése, natív WinUI 3-as felülettel
 (Mica / Acrylic háttér, Fluent ikonok, lekerekített kártyák, világos/sötét téma a rendszer szerint).
@@ -26,6 +26,11 @@ A program önálló (self-contained), a futtatáshoz nem kell külön .NET vagy 
 | Billentyű | Funkció |
 |---|---|
 | Tab | Váltás a panelek között |
+| Ctrl+T / Ctrl+W | Új fül / fül bezárása |
+| Ctrl+Tab / Ctrl+Shift+Tab | Következő / előző fül |
+| Ctrl+↑ | A kijelölt mappa megnyitása új fülön |
+| Gépelés a listában | Gyorskereső: ráugrik az első egyező fájlra |
+| Ctrl+Q | Gyorsnézet a másik panelben (képek, szövegek, mappák) |
 | Enter / dupla katt | Megnyitás / belépés a mappába |
 | Backspace, Alt+↑ | Szülőmappa |
 | Alt+← | Vissza |
@@ -48,11 +53,14 @@ A program önálló (self-contained), a futtatáshoz nem kell külön .NET vagy 
 | Ctrl+H | Rejtett fájlok be/ki |
 | Ctrl+U | Panelek cseréje |
 | Ctrl+I | A másik panel is ugyanide lép |
-| Ctrl+T | Windows Terminal az aktuális mappában |
+| Ctrl+Shift+T | Windows Terminal az aktuális mappában |
 | Ctrl+E | Megnyitás Intézőben |
 
 A másolás/mozgatás/törlés a Windows saját motorjával megy: natív folyamatjelzőt kapsz,
 ütközésnél "Csere / Kihagyás" ablakot, a Lomtárba került fájlokat pedig vissza lehet állítani.
 
-A panelek automatikusan frissülnek, ha a mappa tartalma megváltozik. Az utolsó mappák, az ablakméret,
+Fájlokat egérrel is húzhatsz a panelek között, vagy az Intézőből be és ki
+(alapból másol, **Shift**-tel mozgat; mappára ejtve a mappába kerül).
+
+A panelek automatikusan frissülnek, ha a mappa tartalma megváltozik. A megnyitott fülek, az ablakméret,
 a háttér és a rejtett fájlok beállítása megmarad (`%LOCALAPPDATA%\GlassCommander\settings.json`).
