@@ -1,4 +1,5 @@
-; Glass Commander telepítő (Inno Setup 6)
+; Twinpane telepítő (Inno Setup 6)
+; (A program korábbi neve: Glass Commander – az AppId ugyanaz, így a régi változat helyére települ.)
 ; A GitHub Actions adja át: /DAppVersion=x.y.z /DSourceDir=<publish mappa>
 
 #ifndef AppVersion
@@ -10,22 +11,23 @@
 
 [Setup]
 AppId={{B6E0C1E2-5B5F-4E37-9C2A-6A1F2B3C4D5E}
-AppName=Glass Commander
+AppName=Twinpane
 AppVersion={#AppVersion}
-AppVerName=Glass Commander {#AppVersion}
+AppVerName=Twinpane {#AppVersion}
 AppPublisher=Prophet1218
 AppPublisherURL=https://github.com/Prophet1218/Glass-Commander-
-DefaultDirName={autopf}\Glass Commander
-DefaultGroupName=Glass Commander
+DefaultDirName={autopf}\Twinpane
+UsePreviousAppDir=no
+DefaultGroupName=Twinpane
 DisableProgramGroupPage=yes
 ; Rendszergazdai jog nélkül is telepíthető (saját felhasználóra), de választható "mindenkinek" is.
 PrivilegesRequired=lowest
 PrivilegesRequiredOverridesAllowed=dialog
 OutputDir=..\dist
-OutputBaseFilename=GlassCommander-{#AppVersion}-Setup
+OutputBaseFilename=Twinpane-{#AppVersion}-Setup
 SetupIconFile=..\src\GlassCommander\app.ico
-UninstallDisplayIcon={app}\GlassCommander.exe
-UninstallDisplayName=Glass Commander
+UninstallDisplayIcon={app}\Twinpane.exe
+UninstallDisplayName=Twinpane
 Compression=lzma2/max
 SolidCompression=yes
 WizardStyle=modern
@@ -41,12 +43,19 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 [Tasks]
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
 
+[InstallDelete]
+; A régi "Glass Commander" telepítés és parancsikonjai
+Type: filesandordirs; Name: "{autopf}\Glass Commander"
+Type: files; Name: "{autoprograms}\Glass Commander.lnk"
+Type: files; Name: "{autodesktop}\Glass Commander.lnk"
+Type: files; Name: "{app}\GlassCommander.exe"
+
 [Files]
 Source: "{#SourceDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Icons]
-Name: "{autoprograms}\Glass Commander"; Filename: "{app}\GlassCommander.exe"
-Name: "{autodesktop}\Glass Commander"; Filename: "{app}\GlassCommander.exe"; Tasks: desktopicon
+Name: "{autoprograms}\Twinpane"; Filename: "{app}\Twinpane.exe"
+Name: "{autodesktop}\Twinpane"; Filename: "{app}\Twinpane.exe"; Tasks: desktopicon
 
 [Run]
-Filename: "{app}\GlassCommander.exe"; Description: "{cm:LaunchProgram,Glass Commander}"; Flags: nowait postinstall skipifsilent
+Filename: "{app}\Twinpane.exe"; Description: "{cm:LaunchProgram,Twinpane}"; Flags: nowait postinstall skipifsilent
