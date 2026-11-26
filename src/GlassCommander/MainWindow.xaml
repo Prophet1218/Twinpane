@@ -1,0 +1,120 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Window
+    x:Class="GlassCommander.MainWindow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:local="using:GlassCommander"
+    Title="Glass Commander">
+
+    <Grid x:Name="Root" PreviewKeyDown="Root_PreviewKeyDown">
+        <Grid.Resources>
+            <Style x:Key="FnButton" TargetType="Button" BasedOn="{StaticResource DefaultButtonStyle}">
+                <Setter Property="HorizontalAlignment" Value="Stretch" />
+                <Setter Property="HorizontalContentAlignment" Value="Center" />
+                <Setter Property="Padding" Value="6,7,6,7" />
+                <Setter Property="AllowFocusOnInteraction" Value="False" />
+                <Setter Property="IsTabStop" Value="False" />
+            </Style>
+            <Style x:Key="FnKey" TargetType="TextBlock">
+                <Setter Property="FontWeight" Value="SemiBold" />
+                <Setter Property="Foreground" Value="{ThemeResource AccentTextFillColorPrimaryBrush}" />
+                <Setter Property="VerticalAlignment" Value="Center" />
+            </Style>
+        </Grid.Resources>
+
+        <Grid.RowDefinitions>
+            <RowDefinition Height="48" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <!-- Saját címsor -->
+        <Grid x:Name="AppTitleBar" Grid.Row="0" Padding="16,0,0,0">
+            <StackPanel Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
+                <FontIcon Glyph="&#xE8B7;" FontSize="16" Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}" />
+                <TextBlock Text="Glass Commander" Style="{StaticResource CaptionTextBlockStyle}" VerticalAlignment="Center" />
+                <TextBlock x:Name="VersionText" Style="{StaticResource CaptionTextBlockStyle}" VerticalAlignment="Center"
+                           Foreground="{ThemeResource TextFillColorTertiaryBrush}" />
+            </StackPanel>
+        </Grid>
+
+        <!-- Eszköztár -->
+        <CommandBar Grid.Row="1" DefaultLabelPosition="Right" HorizontalAlignment="Left"
+                    Background="Transparent" IsDynamicOverflowEnabled="False" Margin="6,0,0,2">
+            <AppBarButton Label="Új mappa" Click="NewFolder_Click" ToolTipService.ToolTip="F7" AllowFocusOnInteraction="False">
+                <AppBarButton.Icon><FontIcon Glyph="&#xE8F4;" /></AppBarButton.Icon>
+            </AppBarButton>
+            <AppBarButton Label="Beillesztés" Click="Paste_Click" ToolTipService.ToolTip="Ctrl+V" AllowFocusOnInteraction="False">
+                <AppBarButton.Icon><FontIcon Glyph="&#xE77F;" /></AppBarButton.Icon>
+            </AppBarButton>
+            <AppBarSeparator />
+            <AppBarToggleButton x:Name="HiddenToggle" Label="Rejtett fájlok" Click="Hidden_Click"
+                                ToolTipService.ToolTip="Ctrl+H" AllowFocusOnInteraction="False">
+                <AppBarToggleButton.Icon><FontIcon Glyph="&#xE7B3;" /></AppBarToggleButton.Icon>
+            </AppBarToggleButton>
+            <AppBarButton Label="Panelcsere" Click="Swap_Click" ToolTipService.ToolTip="Ctrl+U" AllowFocusOnInteraction="False">
+                <AppBarButton.Icon><FontIcon Glyph="&#xE8AB;" /></AppBarButton.Icon>
+            </AppBarButton>
+            <AppBarButton Label="Azonos mappa" Click="SamePath_Click" ToolTipService.ToolTip="Ctrl+I – a másik panel is ide lép" AllowFocusOnInteraction="False">
+                <AppBarButton.Icon><FontIcon Glyph="&#xE8A9;" /></AppBarButton.Icon>
+            </AppBarButton>
+            <AppBarSeparator />
+            <AppBarButton Label="Terminál" Click="Terminal_Click" ToolTipService.ToolTip="Ctrl+T" AllowFocusOnInteraction="False">
+                <AppBarButton.Icon><FontIcon Glyph="&#xE756;" /></AppBarButton.Icon>
+            </AppBarButton>
+            <AppBarButton Label="Intéző" Click="Explorer_Click" ToolTipService.ToolTip="Megnyitás Intézőben (Ctrl+E)" AllowFocusOnInteraction="False">
+                <AppBarButton.Icon><FontIcon Glyph="&#xEC50;" /></AppBarButton.Icon>
+            </AppBarButton>
+            <AppBarSeparator />
+            <AppBarButton x:Name="BackdropButton" Label="Háttér: Mica" Click="Backdrop_Click"
+                          ToolTipService.ToolTip="Mica / Mica Alt / Acrylic (üveg)" AllowFocusOnInteraction="False">
+                <AppBarButton.Icon><FontIcon Glyph="&#xE790;" /></AppBarButton.Icon>
+            </AppBarButton>
+        </CommandBar>
+
+        <!-- Két panel -->
+        <Grid Grid.Row="2" Padding="10,0,10,0" ColumnSpacing="8">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+            <local:FilePane x:Name="LeftPane" Grid.Column="0" />
+            <local:FilePane x:Name="RightPane" Grid.Column="1" />
+        </Grid>
+
+        <!-- Funkcióbillentyű-sáv -->
+        <Grid Grid.Row="3" Padding="10,8,10,10" ColumnSpacing="6">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+            <Button Grid.Column="0" Style="{StaticResource FnButton}" Click="F2_Click">
+                <StackPanel Orientation="Horizontal" Spacing="8"><TextBlock Text="F2" Style="{StaticResource FnKey}" /><TextBlock Text="Átnevez" /></StackPanel>
+            </Button>
+            <Button Grid.Column="1" Style="{StaticResource FnButton}" Click="F3_Click">
+                <StackPanel Orientation="Horizontal" Spacing="8"><TextBlock Text="F3" Style="{StaticResource FnKey}" /><TextBlock Text="Megnéz" /></StackPanel>
+            </Button>
+            <Button Grid.Column="2" Style="{StaticResource FnButton}" Click="F4_Click">
+                <StackPanel Orientation="Horizontal" Spacing="8"><TextBlock Text="F4" Style="{StaticResource FnKey}" /><TextBlock Text="Szerkeszt" /></StackPanel>
+            </Button>
+            <Button Grid.Column="3" Style="{StaticResource FnButton}" Click="F5_Click">
+                <StackPanel Orientation="Horizontal" Spacing="8"><TextBlock Text="F5" Style="{StaticResource FnKey}" /><TextBlock Text="Másol" /></StackPanel>
+            </Button>
+            <Button Grid.Column="4" Style="{StaticResource FnButton}" Click="F6_Click">
+                <StackPanel Orientation="Horizontal" Spacing="8"><TextBlock Text="F6" Style="{StaticResource FnKey}" /><TextBlock Text="Mozgat" /></StackPanel>
+            </Button>
+            <Button Grid.Column="5" Style="{StaticResource FnButton}" Click="F7_Click">
+                <StackPanel Orientation="Horizontal" Spacing="8"><TextBlock Text="F7" Style="{StaticResource FnKey}" /><TextBlock Text="Új mappa" /></StackPanel>
+            </Button>
+            <Button Grid.Column="6" Style="{StaticResource FnButton}" Click="F8_Click">
+                <StackPanel Orientation="Horizontal" Spacing="8"><TextBlock Text="F8" Style="{StaticResource FnKey}" /><TextBlock Text="Töröl" /></StackPanel>
+            </Button>
+        </Grid>
+    </Grid>
+</Window>

@@ -1,0 +1,155 @@
+<?xml version="1.0" encoding="utf-8"?>
+<UserControl
+    x:Class="GlassCommander.FilePane"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:local="using:GlassCommander"
+    GotFocus="Pane_GotFocus">
+
+    <UserControl.Resources>
+        <Style x:Key="HeaderButton" TargetType="Button" BasedOn="{StaticResource DefaultButtonStyle}">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="HorizontalAlignment" Value="Stretch" />
+            <Setter Property="HorizontalContentAlignment" Value="Left" />
+            <Setter Property="Padding" Value="6,3,6,3" />
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="Foreground" Value="{ThemeResource TextFillColorSecondaryBrush}" />
+            <Setter Property="AllowFocusOnInteraction" Value="False" />
+        </Style>
+        <Style x:Key="PaneIconButton" TargetType="Button" BasedOn="{StaticResource DefaultButtonStyle}">
+            <Setter Property="Padding" Value="8,6,8,6" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="AllowFocusOnInteraction" Value="False" />
+        </Style>
+    </UserControl.Resources>
+
+    <Grid>
+        <Border x:Name="Frame"
+                CornerRadius="8"
+                BorderThickness="1"
+                BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="*" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
+
+                <!-- Navigációs sor -->
+                <Grid Grid.Row="0" Padding="8,8,8,6" ColumnSpacing="4">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+
+                    <ComboBox x:Name="DriveBox" Grid.Column="0" MinWidth="78"
+                              VerticalAlignment="Center"
+                              SelectionChanged="DriveBox_SelectionChanged" />
+                    <Button Grid.Column="1" Style="{StaticResource PaneIconButton}" Click="Back_Click"
+                            ToolTipService.ToolTip="Vissza (Alt+Balra)">
+                        <FontIcon Glyph="&#xE72B;" FontSize="14" />
+                    </Button>
+                    <Button Grid.Column="2" Style="{StaticResource PaneIconButton}" Click="Up_Click"
+                            ToolTipService.ToolTip="Fel (Backspace)">
+                        <FontIcon Glyph="&#xE74A;" FontSize="14" />
+                    </Button>
+                    <TextBox x:Name="PathBox" Grid.Column="3" VerticalAlignment="Center"
+                             KeyDown="PathBox_KeyDown" IsSpellCheckEnabled="False" />
+                    <Button Grid.Column="4" Style="{StaticResource PaneIconButton}" Click="Refresh_Click"
+                            ToolTipService.ToolTip="Frissítés (Ctrl+R)">
+                        <FontIcon Glyph="&#xE72C;" FontSize="14" />
+                    </Button>
+                </Grid>
+
+                <!-- Oszlopfejléc -->
+                <Grid Grid.Row="1" Padding="14,0,14,2"
+                      BorderThickness="0,0,0,1"
+                      BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="64" />
+                        <ColumnDefinition Width="96" />
+                        <ColumnDefinition Width="138" />
+                    </Grid.ColumnDefinitions>
+                    <Button x:Name="NameHeader" Grid.Column="0" Style="{StaticResource HeaderButton}" Tag="Name" Click="Header_Click" Content="Név" />
+                    <Button x:Name="ExtHeader" Grid.Column="1" Style="{StaticResource HeaderButton}" Tag="Ext" Click="Header_Click" Content="Kit." />
+                    <Button x:Name="SizeHeader" Grid.Column="2" Style="{StaticResource HeaderButton}" Tag="Size" Click="Header_Click"
+                            HorizontalContentAlignment="Right" Content="Méret" />
+                    <Button x:Name="DateHeader" Grid.Column="3" Style="{StaticResource HeaderButton}" Tag="Date" Click="Header_Click" Content="Módosítva" />
+                </Grid>
+
+                <!-- Fájllista -->
+                <ListView x:Name="FileList" Grid.Row="2"
+                          SelectionMode="Extended"
+                          IsDoubleTapEnabled="True"
+                          DoubleTapped="List_DoubleTapped"
+                          RightTapped="List_RightTapped"
+                          SelectionChanged="List_SelectionChanged"
+                          Padding="0,4,0,4">
+                    <ListView.ItemContainerStyle>
+                        <Style TargetType="ListViewItem" BasedOn="{StaticResource DefaultListViewItemStyle}">
+                            <Setter Property="MinHeight" Value="30" />
+                            <Setter Property="Height" Value="30" />
+                            <Setter Property="Padding" Value="10,0,10,0" />
+                            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                        </Style>
+                    </ListView.ItemContainerStyle>
+                    <ListView.ItemTemplate>
+                        <DataTemplate x:DataType="local:FileItem">
+                            <Grid Opacity="{x:Bind ItemOpacity}">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="64" />
+                                    <ColumnDefinition Width="96" />
+                                    <ColumnDefinition Width="138" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
+                                    <FontIcon Glyph="{x:Bind Glyph}" Foreground="{x:Bind IconBrush}" FontSize="16" />
+                                    <TextBlock Text="{x:Bind BaseName}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+                                </StackPanel>
+                                <TextBlock Grid.Column="1" Text="{x:Bind Extension}" VerticalAlignment="Center"
+                                           Padding="6,0,0,0" TextTrimming="CharacterEllipsis"
+                                           Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                <TextBlock Grid.Column="2" Text="{x:Bind SizeText}" VerticalAlignment="Center"
+                                           HorizontalAlignment="Right" Padding="0,0,6,0"
+                                           Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                <TextBlock Grid.Column="3" Text="{x:Bind DateText}" VerticalAlignment="Center"
+                                           Padding="6,0,0,0"
+                                           Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                            </Grid>
+                        </DataTemplate>
+                    </ListView.ItemTemplate>
+                </ListView>
+
+                <!-- Állapotsor -->
+                <Grid Grid.Row="3" Padding="14,6,14,8"
+                      BorderThickness="0,1,0,0"
+                      BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <TextBlock x:Name="StatusText" FontSize="12"
+                               Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                    <TextBlock x:Name="FreeText" Grid.Column="1" FontSize="12"
+                               Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                </Grid>
+            </Grid>
+        </Border>
+
+        <!-- Aktív panel kiemelése -->
+        <Border x:Name="ActiveRing"
+                CornerRadius="8"
+                BorderThickness="2"
+                BorderBrush="{ThemeResource AccentFillColorDefaultBrush}"
+                IsHitTestVisible="False"
+                Opacity="0" />
+    </Grid>
+</UserControl>
