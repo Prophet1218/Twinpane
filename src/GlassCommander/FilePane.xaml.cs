@@ -60,6 +60,8 @@ public sealed partial class FilePane : UserControl
     private readonly DispatcherQueueTimer _driveTimer;
     private string _driveSignature = "";
     private readonly MenuFlyout _menu = new();
+    private readonly MenuFlyout _bgMenu = new();
+    private readonly List<MenuFlyoutItemBase> _archiveItems = new();
 
     public FilePane()
     {
@@ -626,15 +628,28 @@ public sealed partial class FilePane : UserControl
 
     private void List_RightTapped(object sender, RightTappedRoutedEventArgs e)
     {
-        if ((e.OriginalSource as FrameworkElement)?.DataContext is FileItem item && !FileList.SelectedItems.Contains(item))
+        Activated?.Invoke(this, EventArgs.Empty);
+        e.Handled = true;
+
+        // Üres részre kattintott: háttérmenü (új mappa, beillesztés, …)
+        if ((e.OriginalSource as FrameworkElement)?.DataContext is not FileItem item || item.IsParent)
+        {
+            _bgMenu.ShowAt(FileList, e.GetPosition(FileList));
+            return;
+        }
+
+        if (!FileList.SelectedItems.Contains(item))
         {
             FileList.SelectedItems.Clear();
             FileList.SelectedItems.Add(item);
             if (FileList.ContainerFromItem(item) is ListViewItem c) c.Focus(FocusState.Pointer);
         }
-        Activated?.Invoke(this, EventArgs.Empty);
+
+        // A kicsomagolás csak tömörített fájloknál látszik
+        bool archive = GetSelection().Any(ArchiveTools.IsArchive);
+        foreach (var mi in _archiveItems) mi.Visibility = archive ? Visibility.Visible : Visibility.Collapsed;
+
         _menu.ShowAt(FileList, e.GetPosition(FileList));
-        e.Handled = true;
     }
 
     private async void PathBox_KeyDown(object sender, KeyRoutedEventArgs e)
@@ -660,13 +675,31 @@ public sealed partial class FilePane : UserControl
 
     private void BuildMenu()
     {
-        void Add(string text, string glyph, string cmd, string? keys = null)
+        MenuFlyoutItem Make(string text, string glyph, string cmd, string? keys)
         {
             var mi = new MenuFlyoutItem { Text = text, Icon = new FontIcon { Glyph = glyph } };
             if (keys != null) mi.KeyboardAcceleratorTextOverride = keys;
             mi.Click += (_, _) => CommandRequested?.Invoke(this, cmd);
-            _menu.Items.Add(mi);
+            return mi;
         }
+        void Add(string text, string glyph, string cmd, string? keys = null) => _menu.Items.Add(Make(text, glyph, cmd, keys));
+        void AddArchive(MenuFlyoutItemBase item)
+        {
+            _archiveItems.Add(item);
+            _menu.Items.Add(item);
+        }
+        void AddBg(string text, string glyph, string cmd, string? keys = null) => _bgMenu.Items.Add(Make(text, glyph, cmd, keys));
+
+        // Háttérmenü (jobb klikk üres részen)
+        AddBg("Új mappa", "", "newfolder", "F7");
+        AddBg("Új szöveges dokumentum", "", "newfile");
+        _bgMenu.Items.Add(new MenuFlyoutSeparator());
+        AddBg("Beillesztés", "", "paste", "Ctrl+V");
+        AddBg("Frissítés", "", "refresh", "Ctrl+R");
+        _bgMenu.Items.Add(new MenuFlyoutSeparator());
+        AddBg("Terminál itt", "", "terminal", "Ctrl+Shift+T");
+        AddBg("Megnyitás Intézőben", "", "explorer", "Ctrl+E");
+        AddBg("Mappa tulajdonságai", "", "folderprops");
 
         Add("Megnyitás", "", "open", "Enter");
         Add("Megnyitás új fülön", "", "opentab", "Ctrl+↑");
@@ -681,6 +714,11 @@ public sealed partial class FilePane : UserControl
         Add("Mozgatás a másik panelre", "", "move", "F6");
         Add("Átnevezés", "", "rename", "F2");
         Add("Törlés", "", "delete", "Del");
+        _menu.Items.Add(new MenuFlyoutSeparator());
+        AddArchive(Make("Kicsomagolás mappába", "", "extract-folder", "Alt+F9"));
+        AddArchive(Make("Kicsomagolás ide", "", "extract-here", null));
+        AddArchive(Make("Kicsomagolás a másik panelre", "", "extract-other", null));
+        Add("Tömörítés ZIP-be…", "", "compress", "Alt+F5");
         _menu.Items.Add(new MenuFlyoutSeparator());
         Add("Terminál itt", "", "terminal");
         Add("Tulajdonságok", "", "properties", "Alt+Enter");

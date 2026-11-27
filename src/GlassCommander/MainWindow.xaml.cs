@@ -11,7 +11,7 @@ using Windows.UI.Core;
 
 namespace GlassCommander;
 
-public sealed partial class MainWindow : Window
+public sealed partial class MainWindow : Window, IDialogHost
 {
     private readonly AppSettings _settings = AppSettings.Load();
     private readonly IntPtr _hwnd;
@@ -52,6 +52,7 @@ public sealed partial class MainWindow : Window
         RightPane.DriveCommandRequested += OnDriveCommand;
         RightPane.CurrentItemChanged += OnPaneCurrentItemChanged;
 
+        Dialogs.Host = this;
         Root.Loaded += Root_Loaded;
         Closed += MainWindow_Closed;
     }
@@ -143,7 +144,7 @@ public sealed partial class MainWindow : Window
             return;
         }
         using var cts = new CancellationTokenSource();
-        var closed = ShowOverlayAsync(view.Title, view.Content, "Windows-tulajdonságok", "Bezárás");
+        var closed = ShowOverlayAsync(view.Title, view.Content, "Windows-tulajdonságok", "Bezárás", primaryIsDefault: false);
         _ = view.StartAsync(cts.Token);
         bool primary = await closed;
         cts.Cancel();
@@ -154,19 +155,67 @@ public sealed partial class MainWindow : Window
 
     private TaskCompletionSource<bool>? _overlayTcs;
 
+    private bool _overlayCancelable;
+
     private bool OverlayOpen => Overlay.Visibility == Visibility.Visible;
 
-    private Task<bool> ShowOverlayAsync(string title, UIElement content, string primaryText, string closeText)
+    private static Style? FindStyle(string key)
+    {
+        try { return Application.Current.Resources[key] as Style; }
+        catch { return null; }
+    }
+
+    /// <summary>
+    /// Villanásmentes párbeszéd a főablakon belül. primaryText null: csak egy gomb;
+    /// closeText is null: gomb nélküli "dolgozom" ablak, amit a kód zár be.
+    /// </summary>
+    private Task<bool> ShowOverlayAsync(string title, UIElement content, string? primaryText, string? closeText,
+                                        bool primaryIsDefault)
     {
         _overlayTcs?.TrySetResult(false);
         OverlayTitle.Text = title;
         OverlayContent.Content = content;
-        OverlayPrimary.Content = primaryText;
-        OverlayClose.Content = closeText;
+
+        bool hasPrimary = primaryText != null;
+        OverlayPrimary.Visibility = hasPrimary ? Visibility.Visible : Visibility.Collapsed;
+        OverlayPrimaryColumn.Width = hasPrimary ? new GridLength(1, GridUnitType.Star) : new GridLength(0);
+        OverlayPrimary.Content = primaryText ?? "";
+        OverlayClose.Content = closeText ?? "";
+        OverlayButtons.Visibility = closeText != null ? Visibility.Visible : Visibility.Collapsed;
+        _overlayCancelable = closeText != null;
+
+        // Az alapértelmezett (Enterrel aktiválható) gomb legyen kiemelt
+        var accent = FindStyle("AccentButtonStyle");
+        var normal = FindStyle("DefaultButtonStyle");
+        if (accent != null && normal != null)
+        {
+            OverlayPrimary.Style = hasPrimary && primaryIsDefault ? accent : normal;
+            OverlayClose.Style = hasPrimary && primaryIsDefault ? normal : accent;
+        }
+
         Overlay.Visibility = Visibility.Visible;
-        OverlayClose.Focus(FocusState.Programmatic);
+        if (hasPrimary && primaryIsDefault) OverlayPrimary.Focus(FocusState.Programmatic);
+        else if (closeText != null) OverlayClose.Focus(FocusState.Programmatic);
+
         _overlayTcs = new TaskCompletionSource<bool>();
         return _overlayTcs.Task;
+    }
+
+    Task<bool> IDialogHost.ShowAsync(string title, UIElement content, string? primaryText, string? closeText, bool primaryIsDefault)
+        => ShowOverlayAsync(title, content, primaryText, closeText, primaryIsDefault);
+
+    void IDialogHost.Close(bool primary) => CloseOverlay(primary);
+
+    /// <summary>Folyamatjelzős "dolgozom" ablak (pl. kicsomagolás).</summary>
+    private (ProgressBar Bar, TextBlock Text) ShowBusy(string title, string text)
+    {
+        var bar = new ProgressBar { Minimum = 0, Maximum = 100, IsIndeterminate = true, Width = 420 };
+        var label = new TextBlock { Text = text, TextTrimming = TextTrimming.CharacterEllipsis, Width = 420 };
+        var panel = new StackPanel { Spacing = 14 };
+        panel.Children.Add(label);
+        panel.Children.Add(bar);
+        _ = ShowOverlayAsync(title, panel, null, null, false);
+        return (bar, label);
     }
 
     private void CloseOverlay(bool primary)
@@ -181,6 +230,110 @@ public sealed partial class MainWindow : Window
 
     private void OverlayPrimary_Click(object sender, RoutedEventArgs e) => CloseOverlay(true);
     private void OverlayClose_Click(object sender, RoutedEventArgs e) => CloseOverlay(false);
+
+    // ------------------------------------------------------------------ Új fájl, kicsomagolás, tömörítés
+
+    private async Task NewTextFileAsync()
+    {
+        var name = await Dialogs.PromptAsync(Root.XamlRoot, "Új szöveges dokumentum", $"Új fájl itt: {Active.CurrentPath}",
+                                             "Új szöveges dokumentum.txt", "Létrehozás", selectStemOnly: true);
+        if (name == null) { Active.FocusList(); return; }
+        var path = Path.Combine(Active.CurrentPath, name);
+        if (File.Exists(path) || Directory.Exists(path))
+        {
+            await Dialogs.ErrorAsync(Root.XamlRoot, $"Már létezik ilyen nevű elem: {name}");
+            return;
+        }
+        try { await File.WriteAllTextAsync(path, ""); }
+        catch (Exception ex) { await Dialogs.ErrorAsync(Root.XamlRoot, ex.Message); return; }
+        await Active.RefreshAsync(name);
+        Active.FocusList();
+    }
+
+    /// <summary>mode: "folder" = saját mappába, "here" = ide, "other" = a másik panelre (saját mappába).</summary>
+    private async Task ExtractAsync(string mode)
+    {
+        var archives = Active.GetSelection().Where(ArchiveTools.IsArchive).ToList();
+        if (archives.Count == 0)
+        {
+            await Dialogs.ErrorAsync(Root.XamlRoot, "Válassz ki egy tömörített fájlt (zip, 7z, rar, tar, gz…).");
+            return;
+        }
+
+        var baseDir = mode == "other" ? Other.CurrentPath : Active.CurrentPath;
+        string? lastFolder = null;
+
+        foreach (var a in archives)
+        {
+            string dest = mode == "here"
+                ? baseDir
+                : ArchiveTools.UniquePath(Path.Combine(baseDir, ArchiveTools.FolderNameFor(a.FullPath)));
+
+            if (mode == "here")
+            {
+                int conflicts = ArchiveTools.CountConflicts(a.FullPath, dest);
+                if (conflicts > 0 && !await Dialogs.ConfirmAsync(Root.XamlRoot, "Felülírás",
+                        $"{conflicts} fájl már létezik ezen a helyen, és felülíródik. Folytatod?", "Felülírás"))
+                    continue;
+            }
+
+            var (bar, label) = ShowBusy("Kicsomagolás", $"{a.Name}  →  {dest}");
+            var progress = new Progress<double>(v => { bar.IsIndeterminate = false; bar.Value = v; });
+            try
+            {
+                await ArchiveTools.ExtractAsync(a.FullPath, dest, progress);
+                if (mode != "here") lastFolder = Path.GetFileName(dest);
+                CloseOverlay(true);
+            }
+            catch (Exception ex)
+            {
+                CloseOverlay(false);
+                await Dialogs.ErrorAsync(Root.XamlRoot, ex.Message);
+                break;
+            }
+        }
+
+        await LeftPane.RefreshAsync();
+        await RightPane.RefreshAsync();
+        var target = mode == "other" ? Other : Active;
+        if (lastFolder != null) await target.RefreshAsync(lastFolder);
+        Active.FocusList();
+    }
+
+    private async Task CompressAsync()
+    {
+        var sel = Active.GetSelection();
+        if (sel.Count == 0) return;
+
+        string suggested = sel.Count == 1
+            ? (sel[0].IsDirectory ? sel[0].Name : Path.GetFileNameWithoutExtension(sel[0].Name))
+            : Path.GetFileName(Active.CurrentPath.TrimEnd('\\'));
+        if (string.IsNullOrWhiteSpace(suggested)) suggested = "Archívum";
+
+        var name = await Dialogs.PromptAsync(Root.XamlRoot, "Tömörítés ZIP-be",
+            $"{Describe(sel)} tömörítése ide: {Active.CurrentPath}", suggested + ".zip", "Tömörítés", selectStemOnly: true);
+        if (name == null) { Active.FocusList(); return; }
+        if (!name.EndsWith(".zip", StringComparison.OrdinalIgnoreCase)) name += ".zip";
+
+        var zip = Path.Combine(Active.CurrentPath, name);
+        if (File.Exists(zip))
+            zip = ArchiveTools.UniquePath(Path.Combine(Active.CurrentPath, Path.GetFileNameWithoutExtension(name)), ".zip");
+
+        var (bar, _) = ShowBusy("Tömörítés", $"{Describe(sel)}  →  {Path.GetFileName(zip)}");
+        var progress = new Progress<double>(v => { bar.IsIndeterminate = false; bar.Value = v; });
+        try
+        {
+            await ArchiveTools.CompressAsync(sel.Select(i => i.FullPath).ToList(), zip, progress);
+            CloseOverlay(true);
+        }
+        catch (Exception ex)
+        {
+            CloseOverlay(false);
+            await Dialogs.ErrorAsync(Root.XamlRoot, ex.Message);
+        }
+        await Active.RefreshAsync(Path.GetFileName(zip));
+        Active.FocusList();
+    }
 
     // ------------------------------------------------------------------ Kereső
 
@@ -302,7 +455,7 @@ public sealed partial class MainWindow : Window
             if (e.Key == VirtualKey.Escape)
             {
                 e.Handled = true;
-                CloseOverlay(false);
+                if (_overlayCancelable) CloseOverlay(false);
             }
             return;
         }
@@ -335,7 +488,9 @@ public sealed partial class MainWindow : Window
             case VirtualKey.F2 when !alt && !inText: action = RenameAsync; break;
             case VirtualKey.F3: action = ViewAsync; break;
             case VirtualKey.F4 when !alt: action = EditAsync; break;
+            case VirtualKey.F5 when alt: action = CompressAsync; break;
             case VirtualKey.F5: action = () => CopyMoveAsync(move: false); break;
+            case VirtualKey.F9 when alt: action = () => ExtractAsync("folder"); break;
             case VirtualKey.F6 when shift: action = RenameAsync; break;
             case VirtualKey.F6: action = () => CopyMoveAsync(move: true); break;
             case VirtualKey.F7 when alt:
@@ -567,6 +722,15 @@ public sealed partial class MainWindow : Window
             {
                 case "open": await Active.OpenFocusedAsync(); break;
                 case "opentab": await Active.OpenFocusedInNewTabAsync(); break;
+                case "newfolder": await NewFolderAsync(); break;
+                case "newfile": await NewTextFileAsync(); break;
+                case "refresh": await RefreshBothAsync(); break;
+                case "explorer": ShellOps.OpenInExplorer(Active.CurrentPath); break;
+                case "folderprops": ShellOps.ShowProperties(_hwnd, Active.CurrentPath); break;
+                case "extract-folder": await ExtractAsync("folder"); break;
+                case "extract-here": await ExtractAsync("here"); break;
+                case "extract-other": await ExtractAsync("other"); break;
+                case "compress": await CompressAsync(); break;
                 case "edit": await EditAsync(); break;
                 case "cut": await ClipboardCopyAsync(cut: true); break;
                 case "clipcopy": await ClipboardCopyAsync(cut: false); break;

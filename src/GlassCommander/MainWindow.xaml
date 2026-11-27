@@ -140,13 +140,13 @@
                     </Grid.RowDefinitions>
                     <TextBlock x:Name="OverlayTitle" Style="{StaticResource SubtitleTextBlockStyle}" TextTrimming="CharacterEllipsis" />
                     <ContentPresenter x:Name="OverlayContent" Grid.Row="1" />
-                    <Grid Grid.Row="2" ColumnSpacing="8">
+                    <Grid x:Name="OverlayButtons" Grid.Row="2" ColumnSpacing="8">
                         <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition x:Name="OverlayPrimaryColumn" Width="*" />
                             <ColumnDefinition Width="*" />
                         </Grid.ColumnDefinitions>
-                        <Button x:Name="OverlayPrimary" HorizontalAlignment="Stretch" Click="OverlayPrimary_Click" />
-                        <Button x:Name="OverlayClose" Grid.Column="1" HorizontalAlignment="Stretch"
+                        <Button x:Name="OverlayPrimary" HorizontalAlignment="Stretch" MinWidth="130" Click="OverlayPrimary_Click" />
+                        <Button x:Name="OverlayClose" Grid.Column="1" HorizontalAlignment="Stretch" MinWidth="130"
                                 Style="{StaticResource AccentButtonStyle}" Click="OverlayClose_Click" />
                     </Grid>
                 </Grid>
