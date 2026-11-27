@@ -206,16 +206,40 @@ public sealed partial class MainWindow : Window, IDialogHost
 
     void IDialogHost.Close(bool primary) => CloseOverlay(primary);
 
-    /// <summary>Folyamatjelzős "dolgozom" ablak (pl. kicsomagolás).</summary>
-    private (ProgressBar Bar, TextBlock Text) ShowBusy(string title, string text)
+    /// <summary>
+    /// Folyamatjelzős "dolgozom" ablak (pl. kicsomagolás): nagy százalék, sáv,
+    /// alatta a kész / teljes méret és a fájlok száma. A visszaadott Progress-t kell jelenteni.
+    /// </summary>
+    private IProgress<ArchiveProgress> ShowBusy(string title, string text)
     {
-        var bar = new ProgressBar { Minimum = 0, Maximum = 100, IsIndeterminate = true, Width = 420 };
-        var label = new TextBlock { Text = text, TextTrimming = TextTrimming.CharacterEllipsis, Width = 420 };
-        var panel = new StackPanel { Spacing = 14 };
+        var label = new TextBlock { Text = text, TextTrimming = TextTrimming.CharacterEllipsis, Width = 460, Opacity = 0.8 };
+        var percent = new TextBlock
+        {
+            Text = "0 %",
+            FontSize = 34,
+            FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
+        };
+        var bar = new ProgressBar { Minimum = 0, Maximum = 100, IsIndeterminate = true, Width = 460, MinHeight = 6 };
+        var detail = new TextBlock { Text = "Előkészítés…", FontSize = 12, Opacity = 0.7 };
+
+        var panel = new StackPanel { Spacing = 10 };
         panel.Children.Add(label);
+        panel.Children.Add(percent);
         panel.Children.Add(bar);
+        panel.Children.Add(detail);
         _ = ShowOverlayAsync(title, panel, null, null, false);
-        return (bar, label);
+
+        return new Progress<ArchiveProgress>(p =>
+        {
+            bar.IsIndeterminate = false;
+            bar.Value = p.Percent;
+            percent.Text = $"{p.Percent:0} %";
+            var size = p.TotalBytes > 0
+                ? $"{FileItem.FormatSize(p.DoneBytes)} / {FileItem.FormatSize(p.TotalBytes)}"
+                : "";
+            var files = p.TotalFiles > 0 ? $"{p.DoneFiles} / {p.TotalFiles} fájl" : "";
+            detail.Text = string.Join("   ·   ", new[] { size, files }.Where(t => t.Length > 0));
+        });
     }
 
     private void CloseOverlay(bool primary)
@@ -277,8 +301,7 @@ public sealed partial class MainWindow : Window, IDialogHost
                     continue;
             }
 
-            var (bar, label) = ShowBusy("Kicsomagolás", $"{a.Name}  →  {dest}");
-            var progress = new Progress<double>(v => { bar.IsIndeterminate = false; bar.Value = v; });
+            var progress = ShowBusy("Kicsomagolás", $"{a.Name}  →  {dest}");
             try
             {
                 await ArchiveTools.ExtractAsync(a.FullPath, dest, progress);
@@ -319,8 +342,7 @@ public sealed partial class MainWindow : Window, IDialogHost
         if (File.Exists(zip))
             zip = ArchiveTools.UniquePath(Path.Combine(Active.CurrentPath, Path.GetFileNameWithoutExtension(name)), ".zip");
 
-        var (bar, _) = ShowBusy("Tömörítés", $"{Describe(sel)}  →  {Path.GetFileName(zip)}");
-        var progress = new Progress<double>(v => { bar.IsIndeterminate = false; bar.Value = v; });
+        var progress = ShowBusy("Tömörítés", $"{Describe(sel)}  →  {Path.GetFileName(zip)}");
         try
         {
             await ArchiveTools.CompressAsync(sel.Select(i => i.FullPath).ToList(), zip, progress);
